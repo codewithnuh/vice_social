@@ -1,0 +1,54 @@
+[
+  {
+    "id": "seed-post-1",
+    "author": "Razor_V8",
+    "category": "Vehicle Showcase",
+    "district": "Ocean Beach",
+    "image": "https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=900&q=80",
+    "caption": "Custom turbocharged twin engine flex outside Ocean Beach marina 🔥 #ViceSocial #CustomRide #SupercarShowcase",
+    "likes": 1240,
+    "likedBy": ["Chrome_Czar", "Neon_Drifter", "Kira_Neon"],
+    "reposts": 87,
+    "minutesAgo": 12,
+    "repBonus": 350
+  },
+  {
+    "id": "seed-post-2",
+    "author": "Kira_Neon",
+    "category": "Night Life",
+    "district": "Vice Point",
+    "image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=900&q=80",
+    "caption": "Malibu Club rooftop session with the full crew tonight 🌴 Miami synthwave energy only. #MalibuNightlife #ViceSocial",
+    "likes": 3410,
+    "likedBy": ["DJ_Synthwave", "Synth_God"],
+    "reposts": 212,
+    "minutesAgo": 45,
+    "repBonus": 500
+  },
+  {
+    "id": "seed-post-3",
+    "author": "Synth_God",
+    "category": "Street Moment",
+    "district": "Downtown",
+    "image": "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=900&q=80",
+    "caption": "Downtown alleyways hit different under rain and neon lights. Captured on Vice ID Engine. #OceanDriveRaces #ViceSocial",
+    "likes": 890,
+    "likedBy": ["Jax_Viper", "ViceQueen"],
+    "reposts": 41,
+    "minutesAgo": 120,
+    "repBonus": 200
+  },
+  {
+    "id": "seed-post-4",
+    "author": "ViceQueen",
+    "category": "Crew Update",
+    "district": "Little Haiti",
+    "image": "https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?auto=format&fit=crop&w=900&q=80",
+    "caption": "South side squad lineup locked. Turf secured before sunrise. #CrewWarfare #ViceOutlaws",
+    "likes": 2100,
+    "likedBy": ["Chrome_Czar", "Razor_V8"],
+    "reposts": 133,
+    "minutesAgo": 300,
+    "repBonus": 400
+  }
+]

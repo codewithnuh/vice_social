@@ -1,0 +1,44 @@
+[
+  {
+    "id": "seed-c1",
+    "postId": "seed-post-1",
+    "author": "Chrome_Czar",
+    "text": "That rear wing setup is criminal. Which garage did the fab work?",
+    "minutesAgo": 8
+  },
+  {
+    "id": "seed-c2",
+    "postId": "seed-post-1",
+    "author": "Neon_Drifter",
+    "text": "Twin turbo at the marina at midnight. Unreal shot.",
+    "minutesAgo": 5
+  },
+  {
+    "id": "seed-c3",
+    "postId": "seed-post-2",
+    "author": "DJ_Synthwave",
+    "text": "The rooftop set was insane. See you next Friday 🎧",
+    "minutesAgo": 30
+  },
+  {
+    "id": "seed-c4",
+    "postId": "seed-post-2",
+    "author": "ViceQueen",
+    "text": "Malibu nights hit different 🌴",
+    "minutesAgo": 20
+  },
+  {
+    "id": "seed-c5",
+    "postId": "seed-post-3",
+    "author": "Neon_Drifter",
+    "text": "Rain + neon = the Vice formula. Nothing beats it.",
+    "minutesAgo": 90
+  },
+  {
+    "id": "seed-c6",
+    "postId": "seed-post-4",
+    "author": "Chrome_Czar",
+    "text": "South side crew standing by. Say the word.",
+    "minutesAgo": 240
+  }
+]

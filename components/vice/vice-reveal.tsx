@@ -1,16 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Check } from "lucide-react";
+/**
+ * Screen: Reveal — cinematic scan sequence, then result card.
+ * The render is a real Blob (persisted to IndexedDB) and publishing
+ * actually pushes a post into the live feed. In edit mode the scan is
+ * skipped and the card offers SAVE CHANGES instead of publishing.
+ */
+
+import { useEffect, useRef, useState } from "react";
+import { Download, Pencil, Save, Share2, Send } from "lucide-react";
 import { playSfx } from "@/lib/sfx";
-import { CURRENT_USER } from "@/lib/vice-data";
 
 interface ViceRevealProps {
   renderedImage: string;
   caption: string;
-  onShare: () => void;
+  repBonus: number;
+  onPublish: (caption: string) => void;
   onEditAgain: () => void;
-  onRepGain: () => void;
+  onDiscard: () => void;
+  /** Edit mode: save over an existing post instead of publishing. */
+  isEdit?: boolean;
 }
 
 const SCAN_STEPS = [
@@ -18,168 +27,203 @@ const SCAN_STEPS = [
   "APPLYING CINEMATIC COLOR GRADE...",
   "STAMPING DIGITAL IDENTITY SIGNATURE...",
   "CALCULATING REPUTATION BONUS...",
-];
+] as const;
 
-/**
- * Screen: Reveal & analyzing matrix.
- * Runs the scan sequence, then shows the final post card.
- */
 export function ViceReveal({
   renderedImage,
   caption,
-  onShare,
+  repBonus,
+  onPublish,
   onEditAgain,
-  onRepGain,
+  onDiscard,
+  isEdit = false,
 }: ViceRevealProps) {
+  // Edit mode skips the scan entirely — saving over a post is instant.
+  const [scanning, setScanning] = useState(!isEdit);
   const [progress, setProgress] = useState(0);
-  const [done, setDone] = useState(false);
-  const [exported, setExported] = useState(false);
-  const repGainedRef = useRef(false);
+  const [stepText, setStepText] = useState<string>(SCAN_STEPS[0]);
+  const [shared, setShared] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Scan sequence: 0→100% in 5% ticks every 50ms, mirroring the reference.
+  /* Cinematic scan sequence (ported from reference HTML). */
   useEffect(() => {
-    const interval = window.setInterval(() => {
-      setProgress((p) => {
-        const next = p + 5;
-        if (next >= 100) {
-          window.clearInterval(interval);
-          playSfx("shutter");
-          setDone(true);
-          if (!repGainedRef.current) {
-            repGainedRef.current = true;
-            onRepGain();
-          }
-          return 100;
-        }
-        return next;
-      });
+    if (isEdit) return;
+    let progress = 0;
+    const timer = setInterval(() => {
+      progress += 5;
+      setProgress(progress);
+      if (progress === 25) setStepText(SCAN_STEPS[1]);
+      if (progress === 50) setStepText(SCAN_STEPS[2]);
+      if (progress === 75) setStepText(SCAN_STEPS[3]);
+      if (progress >= 100) {
+        clearInterval(timer);
+        playSfx("shutter");
+        setScanning(false);
+      }
     }, 50);
-    return () => window.clearInterval(interval);
-  }, [onRepGain]);
+    timerRef.current = timer;
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isEdit]);
 
-  const stepText =
-    SCAN_STEPS[Math.min(Math.floor(progress / 25), SCAN_STEPS.length - 1)];
+  const handleShare = async () => {
+    playSfx("click");
+    try {
+      const blob = await (await fetch(renderedImage)).blob();
+      const file = new File([blob], "vice-social-moment.jpg", {
+        type: "image/jpeg",
+      });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: "VICE SOCIAL",
+          text: caption || "My Vice Social moment.",
+        });
+      } else {
+        await navigator.clipboard.write([
+          new ClipboardItem({ "image/jpeg": blob }),
+        ]);
+      }
+      setShared(true);
+    } catch {
+      /* user dismissed the share sheet — not an error */
+    }
+  };
 
-  const handleExport = useCallback(() => {
+  const handleExport = () => {
     playSfx("click");
     const link = document.createElement("a");
-    link.download = `ViceSocial_${Date.now()}.jpg`;
+    link.download = "ViceSocial_Moment.jpg";
     link.href = renderedImage;
     link.click();
-    setExported(true);
-  }, [renderedImage]);
-
-  if (!done) {
-    return (
-      <section className="relative flex min-h-screen flex-col items-center justify-center p-6">
-        <div className="flex flex-col items-center justify-center gap-6 text-center">
-          <div className="relative flex h-28 w-28 items-center justify-center">
-            <div className="absolute inset-0 animate-spin rounded-full border-4 border-t-neon-pink border-r-neon-cyan border-b-amber-gold border-l-transparent" />
-            <div className="animate-pulse font-mono text-xs text-neon-cyan">
-              {progress}%
-            </div>
-          </div>
-          <div className="space-y-2">
-            <h3 className="font-display text-xl font-bold tracking-widest text-white uppercase">
-              {stepText}
-            </h3>
-            <p className="font-mono text-xs text-slate-400">
-              CALCULATING REPUTATION SCORE BONUS...
-            </p>
-          </div>
-        </div>
-      </section>
-    );
-  }
+  };
 
   return (
-    <section className="relative flex min-h-screen flex-col items-center justify-center p-6">
-      <div className="animate-float w-full max-w-lg space-y-6">
-        <div className="space-y-2 text-center">
-          <div className="inline-block rounded-full border border-emerald-500/30 bg-emerald-500/20 px-3 py-1 font-mono text-xs font-bold text-emerald-400">
-            ✓ REPUTATION +150 GAINED!
-          </div>
-          <h2 className="font-display text-3xl font-black uppercase italic text-white">
-            YOUR MOMENT IS LIVE
-          </h2>
-        </div>
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden p-6">
+      {/* Backdrop glow */}
+      <div className="pointer-events-none absolute h-[500px] w-[500px] rounded-full bg-neon-pink/10 blur-[140px]" />
 
-        {/* Final post preview */}
-        <div className="hud-glass space-y-3 rounded-2xl border border-neon-pink/40 p-4 shadow-2xl shadow-neon-pink/20">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={CURRENT_USER.avatar}
-                alt="Your avatar"
-                className="h-10 w-10 rounded-lg border border-neon-pink object-cover"
-              />
-              <div>
-                <div className="font-display text-sm font-bold text-white">
-                  {CURRENT_USER.name}
-                </div>
-                <div className="font-mono text-[10px] text-neon-cyan">
-                  NEW MOMENT
-                </div>
-              </div>
+      {scanning ? (
+        /* ---- Scan loader ---- */
+        <div className="relative z-10 flex w-full max-w-md flex-col items-center gap-6 text-center">
+          <div className="neon-border-cyan relative h-56 w-56 overflow-hidden rounded-2xl border border-neon-cyan/40">
+            {/* eslint-disable-next-line @next/next/no-img-element -- data URL render */}
+            <img
+              src={renderedImage}
+              alt="Scanning render"
+              className="h-full w-full object-cover"
+            />
+            {/* scanline sweep */}
+            <div className="scanline-y absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-transparent via-neon-cyan/30 to-transparent" />
+          </div>
+          <div className="w-full space-y-2">
+            <div className="flex justify-between font-mono text-xs text-neon-cyan">
+              <span>{stepText}</span>
+              <span>{progress}%</span>
             </div>
-            <span className="font-mono text-[10px] text-slate-400">JUST NOW</span>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-night-steel">
+              <div
+                className="h-full bg-gradient-to-r from-neon-pink to-neon-cyan transition-all duration-100"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
           </div>
-
-          <div className="overflow-hidden rounded-xl border border-white/10">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+          <p className="font-mono text-[0.6rem] text-slate-500">
+            VICE IDENTITY ENGINE v3.09 // DO NOT POWER OFF
+            <br />
+            PROCESSING THE MOMENT BEFORE IT HITS THE FEED
+          </p>
+        </div>
+      ) : (
+        /* ---- Result card ---- */
+        <div className="relative z-10 flex w-full max-w-md flex-col items-center gap-6 text-center">
+          <div className="hud-glass neon-border-pink w-full space-y-4 rounded-2xl border border-neon-pink/30 p-5">
+            {/* eslint-disable-next-line @next/next/no-img-element -- data URL render */}
             <img
               src={renderedImage}
               alt="Your rendered moment"
-              className="h-auto w-full object-cover"
+              className="aspect-square w-full rounded-xl border border-white/10 object-cover"
             />
-          </div>
-
-          <p className="px-1 font-ui text-xs italic text-slate-300">
-            &quot;{caption || "Cruising downtown Vice City."}&quot;
-          </p>
-
-          <div className="flex items-center justify-between border-t border-white/10 pt-2 font-mono text-xs text-slate-400">
-            <span className="font-bold text-neon-pink">♥ 1 LIKES</span>
-            <span>0 COMMENTS</span>
-            <span className="font-bold text-amber-gold">REP LEVEL UP!</span>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="grid grid-cols-3 gap-3">
-          <button
-            onClick={() => {
-              playSfx("click");
-              onShare();
-            }}
-            className="rounded-xl bg-neon-pink py-3 font-display text-xs font-bold uppercase tracking-wider text-white shadow-lg shadow-neon-pink/30 transition hover:bg-neon-pink/90"
-          >
-            SHARE TO FEED
-          </button>
-          <button
-            onClick={handleExport}
-            className="rounded-xl border border-neon-cyan/40 bg-night-steel py-3 font-display text-xs font-bold uppercase tracking-wider text-neon-cyan transition hover:bg-urban-graphite"
-          >
-            {exported ? (
-              <span className="inline-flex items-center gap-1">
-                <Check className="h-3 w-3" aria-hidden="true" /> SAVED
+            <p className="font-mono text-sm text-slate-300">
+              &ldquo;{caption || "Cruising downtown Vice City."}&rdquo;
+            </p>
+            <div className="flex items-center justify-center font-mono text-xs">
+              <span className="rounded-lg bg-night-steel/60 px-3 py-1.5 text-neon-cyan">
+                STAMPED: VICE SOCIAL
               </span>
+            </div>
+          </div>
+
+          <div className="w-full space-y-3">
+            {isEdit ? (
+              <button
+                onClick={() => {
+                  playSfx("click");
+                  onPublish(caption);
+                }}
+                className="relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-neon-cyan to-emerald-500 px-10 py-4 font-display text-base font-black tracking-widest text-white uppercase shadow-2xl shadow-neon-cyan/40 transition-all hover:scale-[1.02] active:scale-95"
+              >
+                <span className="flex items-center justify-center gap-3">
+                  <Save className="h-5 w-5" aria-hidden="true" />
+                  SAVE CHANGES
+                </span>
+              </button>
             ) : (
-              "EXPORT IMAGE"
+              <button
+                onClick={() => {
+                  playSfx("click");
+                  onPublish(caption);
+                }}
+                className="relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-neon-pink to-purple-600 px-10 py-4 font-display text-base font-black tracking-widest text-white uppercase shadow-2xl shadow-neon-pink/40 transition-all hover:scale-[1.02] active:scale-95"
+              >
+                <span className="flex items-center justify-center gap-3">
+                  <Send className="h-5 w-5" aria-hidden="true" />
+                  PUBLISH TO FEED
+                  <span className="text-amber-gold">+{repBonus} REP</span>
+                </span>
+              </button>
             )}
-          </button>
+
+            <div className="grid grid-cols-3 gap-3">
+              <button
+                onClick={handleShare}
+                className="hud-glass flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-mono text-[0.65rem] text-slate-300 transition hover:text-neon-cyan"
+              >
+                <Share2 className="h-4 w-4" aria-hidden="true" />
+                {shared ? "COPIED" : "SHARE"}
+              </button>
+              <button
+                onClick={handleExport}
+                className="hud-glass flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-mono text-[0.65rem] text-slate-300 transition hover:text-neon-cyan"
+              >
+                <Download className="h-4 w-4" aria-hidden="true" />
+                EXPORT
+              </button>
+              <button
+                onClick={() => {
+                  playSfx("click");
+                  onEditAgain();
+                }}
+                className="hud-glass flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-mono text-[0.65rem] text-slate-300 transition hover:text-neon-cyan"
+              >
+                <Pencil className="h-4 w-4" aria-hidden="true" />
+                EDIT AGAIN
+              </button>
+            </div>
+          </div>
+
           <button
             onClick={() => {
               playSfx("click");
-              onEditAgain();
+              onDiscard();
             }}
-            className="rounded-xl bg-urban-graphite py-3 font-display text-xs font-bold uppercase tracking-wider text-slate-300 transition hover:bg-night-steel"
+            className="font-mono text-[0.65rem] text-slate-500 underline-offset-4 transition hover:text-slate-300 hover:underline"
           >
-            EDIT AGAIN
+            discard this render
           </button>
         </div>
-      </div>
-    </section>
+      )}
+    </div>
   );
 }

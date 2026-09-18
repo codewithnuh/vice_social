@@ -1,0 +1,30 @@
+[
+  {
+    "id": "seed-notif-1",
+    "kind": "comment",
+    "title": "Kira_Neon",
+    "body": "The rooftop set was insane. See you next Friday 🎧",
+    "actor": "Kira_Neon",
+    "postId": "seed-post-2",
+    "read": false,
+    "minutesAgo": 30
+  },
+  {
+    "id": "seed-notif-2",
+    "kind": "like",
+    "title": "Chrome_Czar",
+    "body": "liked your moment",
+    "actor": "Chrome_Czar",
+    "read": false,
+    "minutesAgo": 120
+  },
+  {
+    "id": "seed-notif-3",
+    "kind": "follow",
+    "title": "Neon_Drifter",
+    "body": "recruited you to their crew",
+    "actor": "Neon_Drifter",
+    "read": true,
+    "minutesAgo": 1560
+  }
+]

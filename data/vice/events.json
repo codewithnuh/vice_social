@@ -1,0 +1,29 @@
+[
+  {
+    "id": "seed-e1",
+    "parts": [
+      { "text": "@Kira_Neon", "tone": "pink" },
+      { "text": " uploaded a new Night Life from ", "tone": "plain" },
+      { "text": "Vice Point", "tone": "white" },
+      { "text": ".", "tone": "plain" }
+    ],
+    "minutesAgo": 2
+  },
+  {
+    "id": "seed-e2",
+    "parts": [
+      { "text": "Bounty Alert:", "tone": "gold" },
+      { "text": " Top photo of the hour earns +500 REP Bonus!", "tone": "plain" }
+    ],
+    "minutesAgo": 5
+  },
+  {
+    "id": "seed-e3",
+    "parts": [
+      { "text": "@Synth_God", "tone": "cyan" },
+      { "text": " unlocked trophy ", "tone": "plain" },
+      { "text": "\"Night City Legend\"", "tone": "white" }
+    ],
+    "minutesAgo": 12
+  }
+]

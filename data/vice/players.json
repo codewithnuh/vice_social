@@ -1,0 +1,77 @@
+[
+{
+  "name": "Lucia Caminos",
+  "avatar": "/default.jpg",
+  "crew": "@LeonidaOutlaws",
+  "bio": "Trust. Bad luck, mostly. Vice City raised.",
+  "district": "Downtown",
+  "repScore": 14850,
+  "verified": true,
+  "defaultPlayer": true,
+  "following": ["Jason_VC"]
+},
+  {
+  "name": "Jason",
+  "avatar": "/Jason.avif",
+  "crew": "@LeonidaOutlaws",
+  "bio": "Keep your head down. Vice City raised. Riding with Lucia.",
+  "district": "Downtown",
+  "repScore": 22100,
+  "verified": true,
+  "following": ["Lucia_Caminos"]
+},
+  {
+    "name": "Kira_Neon",
+    "avatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80",
+    "crew": "@SynthKings",
+    "bio": "Rooftop sets, casino lights, no sleep till sunrise.",
+    "district": "Vice Point",
+    "repScore": 18900,
+    "verified": true
+  },
+  {
+    "name": "Synth_God",
+    "avatar": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80",
+    "crew": "@NightCityLegends",
+    "bio": "Analog synths. Digital rain. Downtown alleys at 2AM.",
+    "district": "Downtown",
+    "repScore": 16400,
+    "verified": true
+  },
+  {
+    "name": "ViceQueen",
+    "avatar": "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=150&q=80",
+    "crew": "@ViceOutlaws",
+    "bio": "South side royalty. Turf is family.",
+    "district": "Little Haiti",
+    "repScore": 14200,
+    "verified": true
+  },
+  {
+    "name": "Chrome_Czar",
+    "avatar": "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=150&q=80",
+    "crew": "@NightCityLegends",
+    "bio": "Chrome, leather, gasoline. Full-time garage rat.",
+    "district": "Prawn Island",
+    "repScore": 9800,
+    "verified": false
+  },
+  {
+    "name": "Neon_Drifter",
+    "avatar": "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=150&q=80",
+    "crew": "@SynthKings",
+    "bio": "If it drifts, I shoot it. If it glows, I post it.",
+    "district": "Ocean Beach",
+    "repScore": 7600,
+    "verified": false
+  },
+  {
+    "name": "DJ_Synthwave",
+    "avatar": "https://images.unsplash.com/photo-1519345182560-3f2917c472ef?auto=format&fit=crop&w=150&q=80",
+    "crew": "@NightCityLegends",
+    "bio": "Malibu Club resident. Vinyl purist. 138 BPM and up.",
+    "district": "Vice Point",
+    "repScore": 6100,
+    "verified": false
+  }
+]
