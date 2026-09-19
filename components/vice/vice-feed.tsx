@@ -52,7 +52,7 @@ const TONE_CLASSES: Record<string, string> = {
 
 interface ViceFeedProps {
   onCompose: () => void;
-  onOpenProfile: () => void;
+  onOpenProfileScreen: () => void;
   /** Opens the studio pre-loaded with one of your posts for editing. */
   onEditPost: (post: VicePost) => void;
 }
@@ -80,7 +80,7 @@ function useFps(): string {
   return fps;
 }
 
-export function ViceFeed({ onCompose, onOpenProfile, onEditPost }: ViceFeedProps) {
+export function ViceFeed({ onCompose, onOpenProfileScreen, onEditPost }: ViceFeedProps) {
   const {
     profile,
     posts,
@@ -188,13 +188,13 @@ export function ViceFeed({ onCompose, onOpenProfile, onEditPost }: ViceFeedProps
           </div>
         </div>
 
-        {/* Feed navigation tabs */}
-        <nav className="hidden items-center rounded-xl border border-white/5 bg-urban-graphite/80 p-1 font-mono text-xs sm:flex">
+        {/* Feed navigation tabs — scrollable on mobile */}
+        <nav className="flex items-center overflow-x-auto rounded-xl border border-white/5 bg-urban-graphite/80 p-1 font-mono text-xs scrollbar-none">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => handleTab(id)}
-              className={`flex items-center gap-1.5 rounded-lg px-4 py-2 transition ${
+              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 transition sm:px-4 ${
                 tab === id
                   ? "border border-neon-pink/40 bg-night-steel font-bold text-white shadow-sm"
                   : "text-slate-400 hover:text-white"
@@ -215,14 +215,14 @@ export function ViceFeed({ onCompose, onOpenProfile, onEditPost }: ViceFeedProps
             />
           } />
 
-          {/* Profile quick card — click to edit identity */}
+          {/* Profile quick card — navigates to profile screen */}
           <button
             onClick={() => {
               playSfx("click");
-              onOpenProfile();
+              onOpenProfileScreen();
             }}
             className="group flex items-center gap-3 rounded-xl border border-transparent px-2 py-1 transition hover:border-white/10"
-            title="Edit your identity"
+            title="View your profile"
           >
             <div className="hidden text-right sm:block">
               <div className="flex items-center justify-end gap-1.5 font-display text-xs font-bold text-white">
@@ -249,7 +249,13 @@ export function ViceFeed({ onCompose, onOpenProfile, onEditPost }: ViceFeedProps
         {/* Left column: profile & hot districts */}
         <div className="hidden space-y-6 lg:col-span-3 lg:block">
           <div className="hud-glass space-y-4 rounded-2xl border border-white/10 p-5">
-            <div className="relative flex h-24 items-end overflow-hidden rounded-xl border border-white/10 bg-gradient-to-r from-neon-pink/30 to-purple-800/40 p-3">
+            <button
+              onClick={() => {
+                playSfx("click");
+                onOpenProfileScreen();
+              }}
+              className="relative flex h-24 w-full items-end overflow-hidden rounded-xl border border-white/10 bg-gradient-to-r from-neon-pink/30 to-purple-800/40 p-3 text-left transition hover:border-white/20"
+            >
               <span className="absolute top-2 right-2 rounded bg-black/60 px-2 py-0.5 font-mono text-[10px] text-neon-cyan">
                 VERIFIED PLAYER
               </span>
@@ -270,7 +276,7 @@ export function ViceFeed({ onCompose, onOpenProfile, onEditPost }: ViceFeedProps
                   </div>
                 </div>
               </div>
-            </div>
+            </button>
 
             {profile.bio && (
               <p className="border-l-2 border-neon-cyan/40 pl-2 text-[11px] leading-relaxed text-slate-400">
@@ -289,6 +295,21 @@ export function ViceFeed({ onCompose, onOpenProfile, onEditPost }: ViceFeedProps
                 <div className="text-[10px] text-slate-400">POSTS</div>
                 <div className="text-sm font-bold text-neon-cyan">
                   {myPosts.length}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-center font-mono">
+              <div className="rounded-lg border border-white/5 bg-night-steel/60 p-2">
+                <div className="text-[10px] text-slate-400">FOLLOWERS</div>
+                <div className="text-sm font-bold text-neon-pink">
+                  {profile.followers.length}
+                </div>
+              </div>
+              <div className="rounded-lg border border-white/5 bg-night-steel/60 p-2">
+                <div className="text-[10px] text-slate-400">FOLLOWING</div>
+                <div className="text-sm font-bold text-amber-gold">
+                  {profile.following.length}
                 </div>
               </div>
             </div>
@@ -476,16 +497,17 @@ export function ViceFeed({ onCompose, onOpenProfile, onEditPost }: ViceFeedProps
       </div>
 
       {/* Floating action button */}
-      <div className="fixed right-6 bottom-6 z-40 sm:right-8 sm:bottom-8">
+      <div className="fixed right-4 bottom-4 z-40 sm:right-6 sm:bottom-6 md:right-8 md:bottom-8">
         <button
           onClick={() => {
             playSfx("click");
             onCompose();
           }}
-          className="group relative flex items-center gap-3 rounded-2xl bg-gradient-to-r from-neon-pink to-purple-600 px-6 py-4 font-display text-base font-bold text-white shadow-2xl shadow-neon-pink/50 transition-all hover:scale-105 active:scale-95"
+          className="group relative flex items-center gap-2 rounded-2xl bg-gradient-to-r from-neon-pink to-purple-600 px-4 py-3 font-display text-sm font-bold text-white shadow-2xl shadow-neon-pink/50 transition-all hover:scale-105 active:scale-95 sm:gap-3 sm:px-6 sm:py-4 sm:text-base"
         >
-          <Plus className="h-6 w-6 animate-bounce" aria-hidden="true" />
-          <span>CREATE MOMENT</span>
+          <Plus className="h-5 w-5 animate-bounce sm:h-6 sm:w-6" aria-hidden="true" />
+          <span className="hidden sm:inline">CREATE MOMENT</span>
+          <span className="sm:hidden">CREATE</span>
         </button>
       </div>
 

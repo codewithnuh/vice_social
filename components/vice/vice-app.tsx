@@ -17,10 +17,11 @@ import { ViceProvider, useVice } from "./vice-provider";
 import { ViceFeed } from "./vice-feed";
 import { ViceStudio } from "./vice-studio";
 import { ViceReveal } from "./vice-reveal";
+import { ViceProfileScreen } from "./vice-profile-screen";
 import { playSfx } from "@/lib/sfx";
 import type { VicePost } from "@/lib/vice-data";
 
-type ViceScreen = "feed" | "studio" | "reveal";
+type ViceScreen = "feed" | "studio" | "reveal" | "profile";
 
 function ViceExperience() {
   const { profile, status, publishPost, updatePost, toasts, dismissToast } =
@@ -54,7 +55,7 @@ function ViceExperience() {
         // Save changes over the existing post — no new REP, no re-publish.
         updatePost(editingPost.id, {
           caption: finalCaption,
-          ...(renderedImage ? { image: renderedImage } : {}),
+          image: renderedImage || editingPost.image,
         });
         setEditingPost(null);
         goTo("feed");
@@ -119,8 +120,17 @@ function ViceExperience() {
       {screen === "feed" && (
         <ViceFeed
           onCompose={() => goTo("studio")}
-          onOpenProfile={() => setProfileOpen(true)}
+          onOpenProfileScreen={() => goTo("profile")}
           onEditPost={handleEditPost}
+        />
+      )}
+
+      {screen === "profile" && (
+        <ViceProfileScreen
+          onBack={() => goTo("feed")}
+          onOpenPlayer={setViewing}
+          onEditPost={handleEditPost}
+          onEditProfile={() => setProfileOpen(true)}
         />
       )}
 

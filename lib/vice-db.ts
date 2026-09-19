@@ -28,7 +28,7 @@ import {
 } from "./vice-data";
 
 const DB_NAME = "vice-social";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 const STORE_PROFILE = "profile";
 const STORE_POSTS = "posts";
@@ -52,20 +52,39 @@ const ALL_STORES: ReadonlyArray<string> = [
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (event) => {
       const db = req.result;
-      if (!db.objectStoreNames.contains(STORE_PROFILE))
-        db.createObjectStore(STORE_PROFILE, { keyPath: "id" });
-      if (!db.objectStoreNames.contains(STORE_POSTS))
-        db.createObjectStore(STORE_POSTS, { keyPath: "id" });
-      if (!db.objectStoreNames.contains(STORE_COMMENTS))
-        db.createObjectStore(STORE_COMMENTS, { keyPath: "id" });
-      if (!db.objectStoreNames.contains(STORE_EVENTS))
-        db.createObjectStore(STORE_EVENTS, { keyPath: "id" });
-      if (!db.objectStoreNames.contains(STORE_PLAYERS))
-        db.createObjectStore(STORE_PLAYERS, { keyPath: "name" });
-      if (!db.objectStoreNames.contains(STORE_NOTIFICATIONS))
-        db.createObjectStore(STORE_NOTIFICATIONS, { keyPath: "id" });
+      const oldVersion = event.oldVersion;
+
+      // Fresh install or v0 — create all stores.
+      if (oldVersion < 1) {
+        if (!db.objectStoreNames.contains(STORE_PROFILE))
+          db.createObjectStore(STORE_PROFILE, { keyPath: "id" });
+        if (!db.objectStoreNames.contains(STORE_POSTS))
+          db.createObjectStore(STORE_POSTS, { keyPath: "id" });
+        if (!db.objectStoreNames.contains(STORE_COMMENTS))
+          db.createObjectStore(STORE_COMMENTS, { keyPath: "id" });
+        if (!db.objectStoreNames.contains(STORE_EVENTS))
+          db.createObjectStore(STORE_EVENTS, { keyPath: "id" });
+        if (!db.objectStoreNames.contains(STORE_PLAYERS))
+          db.createObjectStore(STORE_PLAYERS, { keyPath: "name" });
+        if (!db.objectStoreNames.contains(STORE_NOTIFICATIONS))
+          db.createObjectStore(STORE_NOTIFICATIONS, { keyPath: "id" });
+      }
+
+      // v3 → v4: add `followers` field to the existing profile record.
+      if (oldVersion < 4 && db.objectStoreNames.contains(STORE_PROFILE)) {
+        const tx = (req as IDBOpenDBRequest).transaction!;
+        const store = tx.objectStore(STORE_PROFILE);
+        const getReq = store.get("me");
+        getReq.onsuccess = () => {
+          const profile = getReq.result;
+          if (profile && !profile.followers) {
+            profile.followers = [];
+            store.put(profile);
+          }
+        };
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error ?? new Error("IndexedDB open failed"));
@@ -335,6 +354,23 @@ export async function loadSnapshot(): Promise<ViceSnapshot> {
         requestToPromise(readTx.objectStore(STORE_PLAYERS).getAll()),
         requestToPromise(readTx.objectStore(STORE_NOTIFICATIONS).getAll()),
       ]);
+
+    /* Pass 4: post-load migration — persist any patched fields back to the DB
+       so the migration only runs once (safety net for onupgradeneeded). */
+    if (profileRow && !profileRow.followers) {
+      const migrated = { ...profileRow, followers: [] as string[] };
+      await withStore<void>(STORE_PROFILE, "readwrite", (s) => {
+        s.put(migrated);
+      });
+      return {
+        profile: migrated,
+        posts: [...posts].sort((a, b) => b.createdAt - a.createdAt),
+        comments: [...comments].sort((a, b) => a.createdAt - b.createdAt),
+        events: [...events].sort((a, b) => b.createdAt - a.createdAt),
+        players: [...players].sort((a, b) => b.repScore - a.repScore),
+        notifications: [...notifications].sort((a, b) => b.createdAt - a.createdAt),
+      };
+    }
 
     return {
       profile: profileRow ?? DEFAULT_PROFILE,

@@ -224,8 +224,10 @@ export function ViceStudio({
         ) : (
           /* Editor + caption — stacks below the editor on mobile */
           <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-12">
-            {/* Editor viewport — fluid dvh height, taller on mobile for toolbars */}
-            <div className="hud-glass relative flex h-[calc(100dvh-160px)] min-h-[380px] flex-col overflow-hidden rounded-2xl border border-white/10 sm:h-[70vh] lg:col-span-9">
+            {/* Editor viewport — fluid dvh height on mobile, fixed on desktop */}
+            <div className="hud-glass relative flex min-h-[300px] flex-col overflow-hidden rounded-2xl border border-white/10 sm:h-[70vh] lg:col-span-9"
+              style={{ height: "min(70vh, calc(100dvh - 180px))" }}
+            >
               <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-2 rounded-lg bg-black/50 px-2 py-1 font-mono text-[9px] text-slate-400 sm:top-3 sm:left-3 sm:text-[10px]">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
                 <span>UNLAYER EDITOR // LIVE</span>

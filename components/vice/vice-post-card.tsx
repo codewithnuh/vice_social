@@ -77,40 +77,40 @@ export function VicePostCard({ post, onOpenPlayer, onOpenHashtag, onEditPost }: 
   return (
     <article className="hud-glass space-y-4 rounded-2xl border border-white/10 p-4 transition duration-300 hover:border-white/20 sm:p-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-start gap-3">
           <button
             onClick={() => {
               playSfx("click");
               onOpenPlayer?.(post.author);
             }}
             title={`View ${post.author}'s profile`}
-            className="transition hover:opacity-80"
+            className="shrink-0 transition hover:opacity-80"
           >
             {/* eslint-disable-next-line @next/next/no-img-element -- local data URL / seeded remote thumb */}
             <img
               src={post.avatar}
               alt={`${post.author} avatar`}
-              className="h-10 w-10 rounded-xl border border-neon-pink/60 object-cover"
+              className="h-10 w-10 shrink-0 rounded-xl border border-neon-pink/60 object-cover"
             />
           </button>
-          <div>
-            <div className="flex items-center gap-2 font-display text-sm font-bold text-white">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5 font-display text-sm font-bold text-white sm:gap-2">
               <button
                 onClick={() => {
                   playSfx("click");
                   onOpenPlayer?.(post.author);
                 }}
                 title={`View ${post.author}'s profile`}
-                className="transition hover:text-neon-pink"
+                className="truncate transition hover:text-neon-pink"
               >
                 {post.author}
               </button>
-              <span className="rounded border border-neon-cyan/30 bg-night-steel px-2 py-0.5 font-mono text-[10px] text-neon-cyan">
+              <span className="shrink-0 rounded border border-neon-cyan/30 bg-night-steel px-2 py-0.5 font-mono text-[10px] text-neon-cyan">
                 {post.category}
               </span>
               {post.own && (
-                <span className="rounded border border-amber-gold/30 bg-amber-gold/10 px-2 py-0.5 font-mono text-[10px] text-amber-gold">
+                <span className="shrink-0 rounded border border-amber-gold/30 bg-amber-gold/10 px-2 py-0.5 font-mono text-[10px] text-amber-gold">
                   YOU
                 </span>
               )}

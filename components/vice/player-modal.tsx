@@ -44,6 +44,10 @@ export function PlayerModal({ playerName, onClose }: PlayerModalProps) {
         : [],
     [player, posts]
   );
+  const playerFollowers = useMemo(
+    () => (isMe ? profile.followers : []),
+    [isMe, profile.followers]
+  );
 
   if (!playerName || !player) return null;
 
@@ -87,7 +91,7 @@ export function PlayerModal({ playerName, onClose }: PlayerModalProps) {
         </div>
 
         {/* Stats row */}
-        <div className="grid grid-cols-3 gap-2 p-4 font-mono text-center">
+        <div className={`grid gap-2 p-4 font-mono text-center ${isMe ? "grid-cols-4" : "grid-cols-3"}`}>
           <div className="rounded-lg border border-white/5 bg-night-steel/60 p-2">
             <div className="text-[10px] text-slate-400">REPUTATION</div>
             <div className="text-sm font-bold text-white">
@@ -106,6 +110,14 @@ export function PlayerModal({ playerName, onClose }: PlayerModalProps) {
               {playerPosts.length}
             </div>
           </div>
+          {isMe && (
+            <div className="rounded-lg border border-white/5 bg-night-steel/60 p-2">
+              <div className="text-[10px] text-slate-400">FOLLOWERS</div>
+              <div className="text-sm font-bold text-neon-pink">
+                {playerFollowers.length}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Bio + district */}

@@ -287,4 +287,21 @@
       transform: translateY(420%);
     }
   }
+
+  /* Hide scrollbar on mobile tab rows */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Fix Unlayer image editor overflow on mobile */
+  .unlayer-editor-container {
+    overflow: hidden !important;
+  }
+  .unlayer-editor-container .medium-editor {
+    overflow: auto !important;
+  }
 }

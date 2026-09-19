@@ -56,6 +56,8 @@ export interface ViceProfile {
   repScore: number;
   /** Author names the player follows (powers the CREW FEED tab). */
   following: string[];
+  /** Author names who follow the player (NPC names). */
+  followers: string[];
 }
 
 export interface VicePost {
@@ -138,6 +140,7 @@ interface PlayerFileEntry {
   verified?: boolean;
   defaultPlayer?: boolean;
   following?: string[];
+  followers?: string[];
 }
 
 interface PostFileEntry {
@@ -233,9 +236,10 @@ const FALLBACK_PROFILE = {
   avatar: "/default.jpg",
   crew: "@LeonidaOutlaws",
   bio: "Trust. Bad luck, mostly. Vice City raised.",
-  region: "Port Gellhorn",
+  region: "Downtown",
   repScore: 14850,
-  following: ["Jason_VC"],
+  following: ["Jason"],
+  followers: ["Jason"],
   verified: true,
 };
 
@@ -250,6 +254,7 @@ export const DEFAULT_PROFILE: ViceProfile = {
   region: (DEFAULT_ENTRY?.district as ViceDistrict) ?? "Downtown",
   repScore: DEFAULT_ENTRY?.repScore ?? FALLBACK_PROFILE.repScore,
   following: DEFAULT_ENTRY?.following ?? FALLBACK_PROFILE.following,
+  followers: DEFAULT_ENTRY?.followers ?? FALLBACK_PROFILE.followers,
 };
 
 export const SEED_PLAYERS: VicePlayer[] = PLAYER_ENTRIES.map((p) => ({

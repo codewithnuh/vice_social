@@ -111,6 +111,8 @@ interface ViceStore {
   /** Edit an own post in place (caption and/or image). */
   updatePost: (postId: string, patch: { caption?: string; image?: string }) => void;
   toggleFollow: (author: string) => void;
+  /** Remove a follower from the player's followers list. */
+  removeFollower: (name: string) => void;
   deletePost: (postId: string) => void;
   dismissToast: (id: string) => void;
   markNotificationsRead: () => void;
@@ -183,7 +185,11 @@ export function ViceProvider({ children }: { children: ReactNode }) {
     loadSnapshot()
       .then((snap: ViceSnapshot) => {
         if (cancelled) return;
-        setProfile(snap.profile);
+        // Migration: ensure `followers` exists on profiles loaded from older DB versions.
+        const profile = snap.profile.followers
+          ? snap.profile
+          : { ...snap.profile, followers: [] as string[] };
+        setProfile(profile);
         setPosts(snap.posts);
         setComments(snap.comments);
         setEvents(snap.events.slice(0, 8));
@@ -378,22 +384,22 @@ export function ViceProvider({ children }: { children: ReactNode }) {
         timersRef.current.add(t);
       }
 
-      // Occasional crew recruit (follow).
+      // Occasional crew recruit (NPC follows the player).
       if (Math.random() < 0.4) {
         const t = setTimeout(() => {
           const npc = nextName();
-          const following = Array.from(
-            new Set([...profileRef.current.following, npc])
+          const followers = Array.from(
+            new Set([...profileRef.current.followers, npc])
           );
           setProfile((prev) => {
-            const next = { ...prev, following };
+            const next = { ...prev, followers };
             void saveProfile(next).catch(() => undefined);
             return next;
           });
           notify({
             kind: "follow",
             title: npc,
-            body: "recruited you to their crew",
+            body: "joined your crew",
             avatar: npcAvatarFor(npc),
             actor: npc,
           });
@@ -646,6 +652,14 @@ export function ViceProvider({ children }: { children: ReactNode }) {
     [profile.name, profile.following, updateProfile]
   );
 
+  const removeFollower = useCallback(
+    (name: string) => {
+      const followers = profile.followers.filter((f) => f !== name);
+      updateProfile({ followers });
+    },
+    [profile.followers, updateProfile]
+  );
+
   const deletePost = useCallback((postId: string) => {
     setPosts((prev) => prev.filter((p) => p.id !== postId));
     setComments((prev) => prev.filter((c) => c.postId !== postId));
@@ -764,6 +778,7 @@ export function ViceProvider({ children }: { children: ReactNode }) {
       publishPost,
       updatePost,
       toggleFollow,
+      removeFollower,
       deletePost,
       dismissToast,
       markNotificationsRead,
@@ -790,6 +805,7 @@ export function ViceProvider({ children }: { children: ReactNode }) {
       publishPost,
       updatePost,
       toggleFollow,
+      removeFollower,
       deletePost,
       dismissToast,
       markNotificationsRead,
