@@ -14,7 +14,9 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { playSfx } from "@/lib/sfx";
+import { EASE_OUT } from "@/lib/motion";
 import type { ToastKind, ViceToast } from "./vice-provider";
 
 const KIND_ICON: Record<ToastKind, typeof Heart> = {
@@ -42,17 +44,29 @@ interface ToastStackProps {
 }
 
 export function ToastStack({ toasts, onDismiss, onOpenPlayer }: ToastStackProps) {
+  const reduceMotion = useReducedMotion();
+
   if (toasts.length === 0) return null;
 
   return (
     <div className="pointer-events-none fixed bottom-24 left-4 z-50 flex w-72 flex-col gap-2 sm:left-6 sm:bottom-28">
-      {toasts.map((toast) => {
-        const Icon = KIND_ICON[toast.kind];
-        return (
-          <div
-            key={toast.id}
-            className="hud-glass animate-toast-in pointer-events-auto flex items-start gap-3 rounded-xl border p-3 shadow-2xl"
-          >
+      <AnimatePresence initial={false}>
+        {toasts.map((toast) => {
+          const Icon = KIND_ICON[toast.kind];
+          return (
+            <motion.div
+              key={toast.id}
+              layout={!reduceMotion}
+              initial={reduceMotion ? false : { opacity: 0, x: -16, scale: 0.97 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={
+                reduceMotion
+                  ? undefined
+                  : { opacity: 0, x: -12, scale: 0.97 }
+              }
+              transition={{ duration: 0.22, ease: EASE_OUT }}
+              className="hud-glass pointer-events-auto flex items-start gap-3 rounded-xl border p-3 shadow-2xl"
+            >
             {toast.avatar ? (
               <button
                 onClick={() => {
@@ -109,9 +123,10 @@ export function ToastStack({ toasts, onDismiss, onOpenPlayer }: ToastStackProps)
             >
               <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
-          </div>
-        );
-      })}
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
     </div>
   );
 }

@@ -7,6 +7,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "sw
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
   variable: "--font-space-grotesk",
+  // Space Grotesk ships 300–700 only; font-black (900) would be synthesized.
   weight: ["500", "700"],
   display: "swap",
 });

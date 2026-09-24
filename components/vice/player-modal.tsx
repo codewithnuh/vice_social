@@ -6,6 +6,7 @@
  */
 
 import { useMemo } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   BadgeCheck,
   MapPin,
@@ -14,6 +15,11 @@ import {
   X,
 } from "lucide-react";
 import { playSfx } from "@/lib/sfx";
+import {
+  modalBackdropVariants,
+  modalPanelVariants,
+  modalTransition,
+} from "@/lib/motion";
 import {
   formatCount,
   repLevelFor,
@@ -28,6 +34,7 @@ interface PlayerModalProps {
 
 export function PlayerModal({ playerName, onClose }: PlayerModalProps) {
   const { playerFor, profile, toggleFollow, posts } = useVice();
+  const reduceMotion = useReducedMotion();
 
   const player = useMemo(
     () => (playerName ? playerFor(playerName) : undefined),
@@ -49,14 +56,24 @@ export function PlayerModal({ playerName, onClose }: PlayerModalProps) {
     [isMe, profile.followers]
   );
 
-  if (!playerName || !player) return null;
-
   return (
-    <div
+    <AnimatePresence>
+      {playerName && player && (
+    <motion.div
+      variants={reduceMotion ? undefined : modalBackdropVariants}
+      initial={reduceMotion ? false : "initial"}
+      animate="animate"
+      exit="exit"
+      transition={modalTransition}
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
-      <div
+      <motion.div
+        variants={reduceMotion ? undefined : modalPanelVariants}
+        initial={reduceMotion ? false : "initial"}
+        animate="animate"
+        exit="exit"
+        transition={modalTransition}
         className="hud-glass max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-neon-cyan/30 shadow-2xl shadow-neon-cyan/10"
         onClick={(e) => e.stopPropagation()}
       >
@@ -177,7 +194,9 @@ export function PlayerModal({ playerName, onClose }: PlayerModalProps) {
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

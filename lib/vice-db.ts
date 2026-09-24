@@ -19,6 +19,7 @@ import {
   SEED_NOTIFICATIONS,
   SEED_PLAYERS,
   SEED_POSTS,
+  ensureProfileIdentity,
   type FeedEvent,
   type ViceComment,
   type ViceNotification,
@@ -28,7 +29,7 @@ import {
 } from "./vice-data";
 
 const DB_NAME = "vice-social";
-const DB_VERSION = 4;
+const DB_VERSION = 6;
 
 const STORE_PROFILE = "profile";
 const STORE_POSTS = "posts";
@@ -72,18 +73,13 @@ function openDb(): Promise<IDBDatabase> {
           db.createObjectStore(STORE_NOTIFICATIONS, { keyPath: "id" });
       }
 
-      // v3 → v4: add `followers` field to the existing profile record.
-      if (oldVersion < 4 && db.objectStoreNames.contains(STORE_PROFILE)) {
+      // v6: wipe pre-identity data (permitted) so every browser reseeds
+      // from the JSON files and runs the citizen onboarding flow fresh.
+      if (oldVersion >= 1 && oldVersion < 6) {
         const tx = (req as IDBOpenDBRequest).transaction!;
-        const store = tx.objectStore(STORE_PROFILE);
-        const getReq = store.get("me");
-        getReq.onsuccess = () => {
-          const profile = getReq.result;
-          if (profile && !profile.followers) {
-            profile.followers = [];
-            store.put(profile);
-          }
-        };
+        for (const name of ALL_STORES) {
+          if (db.objectStoreNames.contains(name)) tx.objectStore(name).clear();
+        }
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -232,6 +228,13 @@ export async function savePlayer(player: VicePlayer): Promise<void> {
   });
 }
 
+/** Remove a directory row (used when the player renames themself). */
+export async function deletePlayer(name: string): Promise<void> {
+  await withStore<void>(STORE_PLAYERS, "readwrite", (s) => {
+    s.delete(name);
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /* Notifications (persistent inbox)                                    */
 /* ------------------------------------------------------------------ */
@@ -355,25 +358,19 @@ export async function loadSnapshot(): Promise<ViceSnapshot> {
         requestToPromise(readTx.objectStore(STORE_NOTIFICATIONS).getAll()),
       ]);
 
-    /* Pass 4: post-load migration — persist any patched fields back to the DB
-       so the migration only runs once (safety net for onupgradeneeded). */
-    if (profileRow && !profileRow.followers) {
-      const migrated = { ...profileRow, followers: [] as string[] };
+    /* Pass 4: post-load migration — backfill identity/followers fields and
+       persist any patched record so the migration only runs once (safety
+       net for onupgradeneeded). */
+    const base = profileRow ?? DEFAULT_PROFILE;
+    const profile = ensureProfileIdentity(base);
+    if (profile !== base) {
       await withStore<void>(STORE_PROFILE, "readwrite", (s) => {
-        s.put(migrated);
+        s.put(profile);
       });
-      return {
-        profile: migrated,
-        posts: [...posts].sort((a, b) => b.createdAt - a.createdAt),
-        comments: [...comments].sort((a, b) => a.createdAt - b.createdAt),
-        events: [...events].sort((a, b) => b.createdAt - a.createdAt),
-        players: [...players].sort((a, b) => b.repScore - a.repScore),
-        notifications: [...notifications].sort((a, b) => b.createdAt - a.createdAt),
-      };
     }
 
     return {
-      profile: profileRow ?? DEFAULT_PROFILE,
+      profile,
       posts: [...posts].sort((a, b) => b.createdAt - a.createdAt),
       comments: [...comments].sort((a, b) => a.createdAt - b.createdAt),
       events: [...events].sort((a, b) => b.createdAt - a.createdAt),

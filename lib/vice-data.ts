@@ -33,6 +33,150 @@ export const DISTRICTS: ReadonlyArray<ViceDistrict> = [
 
 export type FeedTab = "trending" | "nearby" | "following";
 
+/* ------------------------------------------------------------------ */
+/* Citizen identity — archetypes, personalities, and the player record */
+/* ------------------------------------------------------------------ */
+
+export type CreatorArchetype =
+  | "Nightlife Creator"
+  | "Street Racer"
+  | "Photographer"
+  | "Lifestyle Creator";
+
+export type PersonalityStyle =
+  | "Bold & Reckless"
+  | "Smooth & Witty"
+  | "Mysterious"
+  | "Hype Machine";
+
+export interface ArchetypeMeta {
+  id: CreatorArchetype;
+  blurb: string;
+  /** Default crew tag granted at registration. */
+  crew: string;
+  /** Seed interests shown on the citizen profile. */
+  interests: string[];
+  /** Literal Tailwind classes (kept static so Tailwind can see them). */
+  selectedClass: string;
+  idleClass: string;
+}
+
+export const ARCHETYPES: ReadonlyArray<ArchetypeMeta> = [
+  {
+    id: "Nightlife Creator",
+    blurb: "Rooftops, neon, and last-call stories.",
+    crew: "@NeonNights",
+    interests: ["nightlife", "music", "rooftops", "neon"],
+    selectedClass:
+      "border-neon-pink bg-neon-pink/10 text-neon-pink shadow-lg shadow-neon-pink/20",
+    idleClass:
+      "border-white/10 text-slate-400 hover:border-neon-pink/50 hover:text-white",
+  },
+  {
+    id: "Street Racer",
+    blurb: "Chrome, corners, and empty highways.",
+    crew: "@ViceRiders",
+    interests: ["cars", "drift", "racing", "garage"],
+    selectedClass:
+      "border-amber-gold bg-amber-gold/10 text-amber-gold shadow-lg shadow-amber-gold/20",
+    idleClass:
+      "border-white/10 text-slate-400 hover:border-amber-gold/50 hover:text-white",
+  },
+  {
+    id: "Photographer",
+    blurb: "Chasing light through the concrete.",
+    crew: "@ShutterVice",
+    interests: ["photography", "street", "film", "golden-hour"],
+    selectedClass:
+      "border-neon-cyan bg-neon-cyan/10 text-neon-cyan shadow-lg shadow-neon-cyan/20",
+    idleClass:
+      "border-white/10 text-slate-400 hover:border-neon-cyan/50 hover:text-white",
+  },
+  {
+    id: "Lifestyle Creator",
+    blurb: "Outfits, spots, and the good life.",
+    crew: "@ViceVibes",
+    interests: ["fashion", "food", "travel", "vibes"],
+    selectedClass:
+      "border-vice-purple bg-vice-purple/10 text-vice-purple shadow-lg shadow-vice-purple/20",
+    idleClass:
+      "border-white/10 text-slate-400 hover:border-vice-purple/50 hover:text-white",
+  },
+];
+
+export interface PersonalityMeta {
+  id: PersonalityStyle;
+  tagline: string;
+  /** Starter bio written at registration. */
+  bio: string;
+}
+
+export const PERSONALITIES: ReadonlyArray<PersonalityMeta> = [
+  {
+    id: "Bold & Reckless",
+    tagline: "Full send, no regrets.",
+    bio: "No brakes, no filter. Vice City is my playground.",
+  },
+  {
+    id: "Smooth & Witty",
+    tagline: "Cool head, sharper tongue.",
+    bio: "Here for the views and the one-liners.",
+  },
+  {
+    id: "Mysterious",
+    tagline: "Less talk. More legend.",
+    bio: "You'll know me by my work.",
+  },
+  {
+    id: "Hype Machine",
+    tagline: "If it's loud, I'm there.",
+    bio: "If it's happening, I'm already there.",
+  },
+];
+
+export function interestsFor(archetype: CreatorArchetype): string[] {
+  return [...(ARCHETYPES.find((a) => a.id === archetype)?.interests ?? [])];
+}
+
+export function crewFor(archetype: CreatorArchetype): string {
+  return ARCHETYPES.find((a) => a.id === archetype)?.crew ?? "@Unaffiliated";
+}
+
+export function bioFor(personality: PersonalityStyle): string {
+  return PERSONALITIES.find((p) => p.id === personality)?.bio ?? "";
+}
+
+const ARCHETYPE_COLORS: Record<CreatorArchetype, readonly [string, string]> = {
+  "Nightlife Creator": ["#ff3b81", "#b829ff"],
+  "Street Racer": ["#ffb84d", "#ff3b81"],
+  Photographer: ["#00e5ff", "#b829ff"],
+  "Lifestyle Creator": ["#00e5ff", "#ffb84d"],
+};
+
+/** Deterministic local SVG avatar — no network, no fingerprinting. */
+export function avatarPlaceholder(
+  username: string,
+  archetype: CreatorArchetype
+): string {
+  const [from, to] = ARCHETYPE_COLORS[archetype];
+  const initials =
+    username
+      .split(/[\s_.-]+/)
+      .map((w) => w[0] ?? "")
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "VC";
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="150" height="150" viewBox="0 0 150 150">` +
+    `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
+    `<stop offset="0%" stop-color="${from}"/><stop offset="100%" stop-color="${to}"/>` +
+    `</linearGradient></defs>` +
+    `<rect width="150" height="150" fill="url(#g)"/>` +
+    `<text x="75" y="78" fill="#050505" font-family="monospace" font-size="52" font-weight="700" text-anchor="middle" dominant-baseline="middle">${initials}</text>` +
+    `</svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
 /** A social profile on the network (the player or an NPC creator). */
 export interface VicePlayer {
   name: string;
@@ -48,16 +192,94 @@ export interface VicePlayer {
 /** The player's identity — fully editable, persisted in IndexedDB. */
 export interface ViceProfile {
   id: "me";
+  /** Stable anonymous citizen ID (crypto.randomUUID) — survives refreshes. */
+  citizenId: string;
+  /** Username — the display name used across the network. */
   name: string;
   crew: string;
   avatar: string;
   bio: string;
+  archetype: CreatorArchetype;
+  personality: PersonalityStyle;
+  interests: string[];
   region: ViceDistrict;
+  /** Reputation XP. Level is derived via repLevelFor(). */
   repScore: number;
   /** Author names the player follows (powers the CREW FEED tab). */
   following: string[];
   /** Author names who follow the player (NPC names). */
   followers: string[];
+  /** When this citizen identity was registered. */
+  createdAt: number;
+  /** False until onboarding completes — gates the welcome flow. */
+  onboarded: boolean;
+}
+
+/** The player's identity projected as a stable read-model. */
+export interface ViceIdentity {
+  citizenId: string;
+  username: string;
+  avatar: string;
+  reputation: number;
+  level: number;
+  createdAt: number;
+  archetype: CreatorArchetype;
+  personality: PersonalityStyle;
+  interests: string[];
+  followers: string[];
+  following: string[];
+}
+
+export function identityFromProfile(profile: ViceProfile): ViceIdentity {
+  return {
+    citizenId: profile.citizenId,
+    username: profile.name,
+    avatar: profile.avatar,
+    reputation: profile.repScore,
+    level: repLevelFor(profile.repScore),
+    createdAt: profile.createdAt,
+    archetype: profile.archetype,
+    personality: profile.personality,
+    interests: profile.interests,
+    followers: profile.followers,
+    following: profile.following,
+  };
+}
+
+/**
+ * Backfill identity fields on profiles loaded from older DB versions.
+ * Returns the same reference when the profile is already complete.
+ * Legacy profiles (any saved name) are marked onboarded so existing
+ * users keep their data; fresh blank profiles stay in onboarding.
+ */
+export function ensureProfileIdentity(profile: ViceProfile): ViceProfile {
+  const archetype = profile.archetype ?? "Photographer";
+  const complete =
+    profile.citizenId &&
+    profile.archetype &&
+    profile.personality &&
+    profile.interests &&
+    profile.interests.length > 0 &&
+    profile.createdAt > 0 &&
+    typeof profile.onboarded === "boolean" &&
+    Array.isArray(profile.followers);
+  if (complete) return profile;
+  return {
+    ...profile,
+    citizenId: profile.citizenId || crypto.randomUUID(),
+    archetype,
+    personality: profile.personality ?? "Smooth & Witty",
+    interests:
+      profile.interests && profile.interests.length > 0
+        ? profile.interests
+        : interestsFor(archetype),
+    createdAt: profile.createdAt || Date.now(),
+    onboarded:
+      typeof profile.onboarded === "boolean"
+        ? profile.onboarded
+        : profile.name.trim().length > 0,
+    followers: profile.followers ?? [],
+  };
 }
 
 export interface VicePost {
@@ -222,39 +444,38 @@ function avatarFor(name: string): string {
   );
 }
 
+/** Public alias used by the publish sequence + notifications. */
+export const npcAvatarFor = avatarFor;
+
 function districtFor(value: string): ViceDistrict {
   return (DISTRICTS as ReadonlyArray<string>).includes(value)
     ? (value as ViceDistrict)
     : "Downtown";
 }
 
-const DEFAULT_ENTRY = PLAYER_ENTRIES.find((p) => p.defaultPlayer);
-
-const FALLBACK_PROFILE = {
-  id: "me",
-  name: "Lucia Caminos",
-  avatar: "/default.jpg",
-  crew: "@LeonidaOutlaws",
-  bio: "Trust. Bad luck, mostly. Vice City raised.",
-  region: "Downtown",
-  repScore: 14850,
-  following: ["Jason"],
-  followers: ["Jason"],
-  verified: true,
-};
-
+/**
+ * Fresh, un-onboarded citizen profile — the blank every new player
+ * starts from. Lucia and the rest of the cast stay NPCs in the
+ * players directory (see SEED_PLAYERS); the player joins their world.
+ * Identity fields (citizenId, createdAt) are backfilled by
+ * ensureProfileIdentity() on first load.
+ */
 export const DEFAULT_PROFILE: ViceProfile = {
   id: "me",
-  name: DEFAULT_ENTRY?.name ?? FALLBACK_PROFILE.name,
-  crew: DEFAULT_ENTRY?.crew ?? FALLBACK_PROFILE.crew,
-  avatar: DEFAULT_ENTRY?.name
-    ? avatarFor(DEFAULT_ENTRY.name)
-    : FALLBACK_PROFILE.avatar,
-  bio: DEFAULT_ENTRY?.bio ?? FALLBACK_PROFILE.bio,
-  region: (DEFAULT_ENTRY?.district as ViceDistrict) ?? "Downtown",
-  repScore: DEFAULT_ENTRY?.repScore ?? FALLBACK_PROFILE.repScore,
-  following: DEFAULT_ENTRY?.following ?? FALLBACK_PROFILE.following,
-  followers: DEFAULT_ENTRY?.followers ?? FALLBACK_PROFILE.followers,
+  citizenId: "",
+  name: "",
+  crew: "@Unaffiliated",
+  avatar: avatarPlaceholder("VC", "Photographer"),
+  bio: "",
+  archetype: "Photographer",
+  personality: "Smooth & Witty",
+  interests: interestsFor("Photographer"),
+  region: "Downtown",
+  repScore: 0,
+  following: [],
+  followers: [],
+  createdAt: 0,
+  onboarded: false,
 };
 
 export const SEED_PLAYERS: VicePlayer[] = PLAYER_ENTRIES.map((p) => ({
@@ -367,13 +588,9 @@ export function repProgressFor(score: number): number {
   return (score % 620) / 620;
 }
 
-/** Player's district rank vs. the NPC ladder (seed players, excluding you). */
+/** Player's district rank vs. the NPC ladder (all seed creators). */
 export function districtRank(score: number): number {
-  return (
-    SEED_PLAYERS.filter(
-      (p) => p.name !== DEFAULT_PROFILE.name && p.repScore > score,
-    ).length + 1
-  );
+  return SEED_PLAYERS.filter((p) => p.repScore > score).length + 1;
 }
 
 /** "14.8K" style formatting, floored to one decimal. */
@@ -385,6 +602,117 @@ export function formatCount(n: number): string {
 export function extractHashtags(caption: string): string[] {
   const matches = caption.match(/#[\p{L}\p{N}_]+/gu) ?? [];
   return matches.map((t) => t.toLowerCase());
+}
+
+/* ------------------------------------------------------------------ */
+/* Create Moment — creation-type picker (shown before the editor)      */
+/* ------------------------------------------------------------------ */
+
+export type MomentType =
+  | "Street Moment"
+  | "Vehicle Showcase"
+  | "Nightlife"
+  | "Crew Moment"
+  | "Personal Story";
+
+export interface MomentTypeMeta {
+  id: MomentType;
+  /** Card headline. */
+  title: string;
+  /** What this transmission is about. */
+  description: string;
+  /** How to write the caption for this type. */
+  captionStyle: string;
+  /** Visual direction for grading the image in the editor. */
+  mood: string;
+  /** Caption suggestion shown as the textarea placeholder. */
+  captionHint: string;
+  /** Default hashtags appended to the hint. */
+  hashtags: string[];
+  /** Literal Tailwind classes (static so Tailwind can see them). */
+  selectedClass: string;
+  idleClass: string;
+}
+
+export const MOMENT_TYPES: ReadonlyArray<MomentTypeMeta> = [
+  {
+    id: "Street Moment",
+    title: "STREET MOMENT",
+    description:
+      "Candid slices of Vice City — corners, crowds, and chaos caught in the wild.",
+    captionStyle: "Short and punchy. Name the block, drop one hashtag.",
+    mood: "Handheld · neon grit · motion blur",
+    captionHint: "Caught this on the corner of…",
+    hashtags: ["#ViceSocial", "#StreetMoment"],
+    selectedClass:
+      "border-neon-cyan bg-neon-cyan/10 shadow-lg shadow-neon-cyan/20",
+    idleClass:
+      "border-white/10 hover:border-neon-cyan/50 hover:bg-white/[0.02]",
+  },
+  {
+    id: "Vehicle Showcase",
+    title: "VEHICLE SHOWCASE",
+    description:
+      "Chrome, calipers, and build sheets — flex the machine for the network.",
+    captionStyle: "Spec-first. Talk torque, mods, and the garage.",
+    mood: "Low angle · golden hour · glossy paint",
+    captionHint: "Fresh build…",
+    hashtags: ["#ViceSocial", "#CustomRide"],
+    selectedClass:
+      "border-amber-gold bg-amber-gold/10 shadow-lg shadow-amber-gold/20",
+    idleClass:
+      "border-white/10 hover:border-amber-gold/50 hover:bg-white/[0.02]",
+  },
+  {
+    id: "Nightlife",
+    title: "NIGHTLIFE",
+    description:
+      "Rooftops, bass drops, and last-call stories from after dark.",
+    captionStyle: "Hype the venue and the crew. Keep it loud.",
+    mood: "UV blacklight · lens flare · crowd glow",
+    captionHint: "Tonight at…",
+    hashtags: ["#ViceSocial", "#MalibuNightlife"],
+    selectedClass:
+      "border-neon-pink bg-neon-pink/10 shadow-lg shadow-neon-pink/20",
+    idleClass:
+      "border-white/10 hover:border-neon-pink/50 hover:bg-white/[0.02]",
+  },
+  {
+    id: "Crew Moment",
+    title: "CREW MOMENT",
+    description: "Squad shots, turf updates, and heist energy.",
+    captionStyle: "Declare allegiance. Rally the crew.",
+    mood: "Group framing · hard shadows · gold highlights",
+    captionHint: "Squad locked in…",
+    hashtags: ["#ViceSocial", "#CrewWarfare"],
+    selectedClass:
+      "border-vice-purple bg-vice-purple/10 shadow-lg shadow-vice-purple/20",
+    idleClass:
+      "border-white/10 hover:border-vice-purple/50 hover:bg-white/[0.02]",
+  },
+  {
+    id: "Personal Story",
+    title: "PERSONAL STORY",
+    description: "Your arc in Vice — wins, losses, and lore worth keeping.",
+    captionStyle: "First person. Reflective or defiant, one short paragraph.",
+    mood: "Intimate close-up · soft haze · diary energy",
+    captionHint: "Here's what happened…",
+    hashtags: ["#ViceSocial", "#ViceDiaries"],
+    selectedClass:
+      "border-emerald-400 bg-emerald-400/10 shadow-lg shadow-emerald-400/20",
+    idleClass:
+      "border-white/10 hover:border-emerald-400/50 hover:bg-white/[0.02]",
+  },
+];
+
+export function momentTypeMeta(id: string | null | undefined): MomentTypeMeta | undefined {
+  return MOMENT_TYPES.find((m) => m.id === id);
+}
+
+/** Caption placeholder + suggested hashtags for the Studio sidebar. */
+export function captionHintFor(meta: MomentTypeMeta | undefined): string {
+  if (!meta) return "Write a vice city caption… #ViceSocial";
+  return `${meta.captionHint} ${meta.hashtags.join(" ")}`;
 }
 
 export function detectCategory(caption: string): string {
@@ -467,6 +795,49 @@ export const NPC_AMBIENT_EVENTS: ReadonlyArray<
     { text: " announced a surprise rooftop set in ", tone: "plain" },
     { text: "Vice Point", tone: "white" },
     { text: ". Doors in 30.", tone: "plain" },
+  ],
+  [
+    { text: "Downtown", tone: "white" },
+    { text: " event trending", tone: "cyan" },
+    { text: " — block party spilling onto Ocean Drive.", tone: "plain" },
+  ],
+  [
+    { text: "Street race", tone: "gold" },
+    { text: " gaining attention", tone: "cyan" },
+    { text: " along the beach strip.", tone: "plain" },
+  ],
+  [
+    { text: "@Lucia", tone: "pink" },
+    { text: " posted a new photo", tone: "cyan" },
+    { text: " from ", tone: "plain" },
+    { text: "Little Havana", tone: "white" },
+    { text: ".", tone: "plain" },
+  ],
+  [
+    { text: "@Jason_D", tone: "pink" },
+    { text: " posted a new photo", tone: "cyan" },
+    { text: " — crew shots from ", tone: "plain" },
+    { text: "Prawn Island", tone: "white" },
+    { text: ".", tone: "plain" },
+  ],
+  [
+    { text: "Creator Watch:", tone: "gold" },
+    { text: " three new uploads from ", tone: "plain" },
+    { text: "Vice Point", tone: "white" },
+    { text: " in the last minute.", tone: "plain" },
+  ],
+  [
+    { text: "@NeonRat", tone: "pink" },
+    { text: " is going viral", tone: "cyan" },
+    { text: " — clip from ", tone: "plain" },
+    { text: "Downtown", tone: "white" },
+    { text: " hitting the For You board.", tone: "plain" },
+  ],
+  [
+    { text: "City Desk:", tone: "cyan" },
+    { text: " night market crowd in ", tone: "plain" },
+    { text: "Ocean Beach", tone: "white" },
+    { text: " is the top tagged spot tonight.", tone: "plain" },
   ],
 ];
 

@@ -8,6 +8,7 @@
  */
 
 import { useCallback } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   Bell,
   Camera,
@@ -21,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { playSfx } from "@/lib/sfx";
+import { EASE_OUT } from "@/lib/motion";
 import { timeAgo, type NotificationKind } from "@/lib/vice-data";
 import { useVice } from "./vice-provider";
 
@@ -64,6 +66,7 @@ export function NotificationInbox({
     clearNotifications,
     removeNotification,
   } = useVice();
+  const reduceMotion = useReducedMotion();
 
   const handleActorClick = useCallback(
     (actor: string) => {
@@ -83,17 +86,25 @@ export function NotificationInbox({
     [onOpenPost, onOpenChange]
   );
 
-  if (!open) return null;
-
   return (
-    <div
+    <AnimatePresence>
+      {open && (
+    <motion.div
+      initial={reduceMotion ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={reduceMotion ? undefined : { opacity: 0 }}
+      transition={{ duration: 0.18, ease: EASE_OUT }}
       className="fixed inset-0 z-[70] flex justify-end bg-black/60 backdrop-blur-sm"
       onClick={() => onOpenChange(false)}
       role="presentation"
     >
       {/* Slide-over panel */}
-      <aside
-        className="animate-slide-in-right hud-glass flex h-full w-full max-w-sm flex-col border-l border-white/10"
+      <motion.aside
+        initial={reduceMotion ? false : { x: 48 }}
+        animate={{ x: 0 }}
+        exit={reduceMotion ? undefined : { x: 48 }}
+        transition={{ duration: 0.24, ease: EASE_OUT }}
+        className="hud-glass flex h-full w-full max-w-sm flex-col border-l border-white/10"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label="Notification inbox"
@@ -248,8 +259,10 @@ export function NotificationInbox({
         <div className="border-t border-white/10 px-4 py-2 font-mono text-[9px] text-slate-600">
           VICE NET // INBOX SYNCED TO LOCAL STORAGE
         </div>
-      </aside>
-    </div>
+      </motion.aside>
+    </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 

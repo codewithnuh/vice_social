@@ -26,12 +26,19 @@ import {
   SEED_NOTIFICATIONS,
   SEED_PLAYERS,
   SEED_POSTS,
+  avatarPlaceholder,
+  bioFor,
+  crewFor,
   detectCategory,
+  ensureProfileIdentity,
   extractHashtags,
   genId,
+  interestsFor,
   repLevelFor,
+  type CreatorArchetype,
   type FeedEvent,
   type EventTone,
+  type PersonalityStyle,
   type ViceComment,
   type ViceNotification,
   type VicePlayer,
@@ -40,6 +47,7 @@ import {
 } from "@/lib/vice-data";
 import {
   deleteNotification as dbDeleteNotification,
+  deletePlayer,
   loadSnapshot,
   markAllNotificationsRead,
   resetDatabase,
@@ -65,6 +73,27 @@ export interface PublishInput {
   image: string;
   caption: string;
   district: ViceProfile["region"];
+  /** Moment type from the Create screen — overrides caption-based detection. */
+  category?: string;
+  /**
+   * When true, skip the random background NPC wave — the cinematic
+   * publish sequence drives engagement itself (deterministic plan).
+   */
+  skipNpcWave?: boolean;
+}
+
+/** One deterministic engagement beat applied by the publish sequence. */
+export type PublishEngagementStep =
+  | { kind: "like"; npc: string }
+  | { kind: "comment"; npc: string; text: string }
+  | { kind: "follow"; npc: string }
+  | { kind: "rep"; npc: string; amount: number };
+
+/** First-run registration payload from the onboarding flow. */
+export interface OnboardingInput {
+  username: string;
+  archetype: CreatorArchetype;
+  personality: PersonalityStyle;
 }
 
 /* ------------------------------------------------------------------ */
@@ -104,10 +133,33 @@ interface ViceStore {
   playerFor: (name: string) => VicePlayer | undefined;
   /* Mutations */
   updateProfile: (patch: Partial<Omit<ViceProfile, "id">>) => void;
+  /** Register the citizen identity — runs once from the onboarding flow. */
+  completeOnboarding: (input: OnboardingInput) => void;
   toggleLike: (postId: string) => void;
   toggleRepost: (postId: string) => void;
   addComment: (postId: string, text: string) => void;
   publishPost: (input: PublishInput) => VicePost;
+  /** Apply one beat of the cinematic publish engagement plan. */
+  applyPublishEngagement: (
+    postId: string,
+    step: PublishEngagementStep
+  ) => void;
+  /**
+   * Schedule a full publish plan on provider-owned timers so reactions
+   * keep landing after the reveal screen unmounts.
+   */
+  schedulePublishPlan: (
+    postId: string,
+    plan: {
+      steps: ReadonlyArray<{
+        at: number;
+        kind: "like" | "comment" | "follow" | "rep";
+        npc: string;
+        text?: string;
+        amount?: number;
+      }>;
+    }
+  ) => void;
   /** Edit an own post in place (caption and/or image). */
   updatePost: (postId: string, patch: { caption?: string; image?: string }) => void;
   toggleFollow: (author: string) => void;
@@ -119,6 +171,8 @@ interface ViceStore {
   clearNotifications: () => void;
   removeNotification: (id: string) => void;
   resetAll: () => void;
+  /** Dev/testing: wipe local data and return to identity onboarding. */
+  resetIdentity: () => void;
   /* Derived */
   commentsFor: (postId: string) => ViceComment[];
 }
@@ -135,10 +189,9 @@ function pick<T>(arr: ReadonlyArray<T>): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-/** NPC actor names used by the simulation (kept in sync with SEED_PLAYERS). */
-const SEED_ACTORS: ReadonlyArray<string> = SEED_PLAYERS.map((p) => p.name).filter(
-  (n) => n !== DEFAULT_PROFILE.name
-);
+/** NPC actor names used by the simulation — the full seed cast (Lucia,
+ * Jason, and the rest are locals; the player joins their world). */
+const SEED_ACTORS: ReadonlyArray<string> = SEED_PLAYERS.map((p) => p.name);
 
 function pickName(): string {
   return pick(SEED_ACTORS);
@@ -159,6 +212,16 @@ function fillTemplate(
   return template
     .replaceAll("{name}", playerName)
     .replaceAll("{district}", district);
+}
+
+/** Soft click when a delayed like lands — no toast spam. */
+function playSfxQuietLike(): void {
+  try {
+    // Lazy so SSR / first paint never touches audio.
+    import("@/lib/sfx").then(({ playSfx }) => playSfx("click"));
+  } catch {
+    /* audio optional */
+  }
 }
 
 export function ViceProvider({ children }: { children: ReactNode }) {
@@ -185,10 +248,8 @@ export function ViceProvider({ children }: { children: ReactNode }) {
     loadSnapshot()
       .then((snap: ViceSnapshot) => {
         if (cancelled) return;
-        // Migration: ensure `followers` exists on profiles loaded from older DB versions.
-        const profile = snap.profile.followers
-          ? snap.profile
-          : { ...snap.profile, followers: [] as string[] };
+        // Migration: backfill identity fields + followers on older records.
+        const profile = ensureProfileIdentity(snap.profile);
         setProfile(profile);
         setPosts(snap.posts);
         setComments(snap.comments);
@@ -201,7 +262,7 @@ export function ViceProvider({ children }: { children: ReactNode }) {
         // IndexedDB unavailable/blocked → degrade gracefully to the file-backed
         // seed data in memory so the city is never an empty shell.
         if (!cancelled) {
-          setProfile(DEFAULT_PROFILE);
+          setProfile(ensureProfileIdentity(DEFAULT_PROFILE));
           setPosts(SEED_POSTS);
           setComments(SEED_COMMENTS);
           setEvents(SEED_EVENTS.slice(0, 8));
@@ -341,28 +402,32 @@ export function ViceProvider({ children }: { children: ReactNode }) {
         return n;
       };
 
-      const likeCount = 3 + Math.floor(Math.random() * 4); // 3–6 likes
+      // Quiet window first — reactions land over ~1–2 minutes, not instantly.
+      const likeCount = 4 + Math.floor(Math.random() * 5); // 4–8 likes
       for (let i = 0; i < likeCount; i += 1) {
-        const delay = 4_000 + i * (3_500 + Math.random() * 4_000);
+        const delay = 8_000 + i * (6_000 + Math.random() * 8_000);
         const npc = nextName();
         const t = setTimeout(() => {
           applyNpcLike(postId, npc);
           grantRep(NPC_LIKE_REP);
-          notify({
-            kind: "like",
-            title: npc,
-            body: "liked your moment",
-            avatar: npcAvatarFor(npc),
-            actor: npc,
-            postId,
-          });
+          // Sparse like toasts — comments/follows still always notify.
+          if (Math.random() < 0.25) {
+            notify({
+              kind: "like",
+              title: npc,
+              body: "liked your moment",
+              avatar: npcAvatarFor(npc),
+              actor: npc,
+              postId,
+            });
+          }
         }, delay);
         timersRef.current.add(t);
       }
 
       const commentCount = 1 + Math.floor(Math.random() * 2); // 1–2 comments
       for (let i = 0; i < commentCount; i += 1) {
-        const delay = 12_000 + i * (15_000 + Math.random() * 12_000);
+        const delay = 40_000 + i * (35_000 + Math.random() * 30_000);
         const npc = nextName();
         const text = fillTemplate(
           pick(NPC_COMMENT_TEMPLATES).text,
@@ -403,7 +468,7 @@ export function ViceProvider({ children }: { children: ReactNode }) {
             avatar: npcAvatarFor(npc),
             actor: npc,
           });
-        }, 20_000 + Math.random() * 20_000);
+        }, 70_000 + Math.random() * 50_000);
         timersRef.current.add(t);
       }
 
@@ -416,7 +481,7 @@ export function ViceProvider({ children }: { children: ReactNode }) {
             title: "BOUNTY SYSTEM",
             body: "+250 REP — your moment is trending",
           });
-        }, 35_000 + Math.random() * 25_000);
+        }, 90_000 + Math.random() * 60_000);
         timersRef.current.add(t);
       }
     },
@@ -425,26 +490,40 @@ export function ViceProvider({ children }: { children: ReactNode }) {
 
   /*
    * Ambient city loop: while the tab is visible, the network generates
-   * occasional live ticker events so the right rail never goes stale.
+   * occasional live ticker events so City Pulse never goes stale.
+   * Interval jitters so updates feel observed, not metronomic.
    */
-  const ambientRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ambientRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (status !== "ready") return;
-    ambientRef.current = setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      const parts = pick(NPC_AMBIENT_EVENTS).map((p) => ({ ...p }));
-      const ambientEvent: FeedEvent = {
-        id: genId("evt"),
-        parts,
-        createdAt: Date.now(),
-      };
-      setEvents((prev) => [ambientEvent, ...prev].slice(0, 8));
-      void saveEvent(ambientEvent).catch(() => undefined);
-    }, 45_000);
-    return () => {
-      if (ambientRef.current) clearInterval(ambientRef.current);
+    // City sim waits until the citizen has registered (onboarding done).
+    if (status !== "ready" || !profile.onboarded) return;
+    let cancelled = false;
+
+    const schedule = () => {
+      if (cancelled) return;
+      const delay = 18_000 + Math.random() * 22_000; // 18–40s
+      ambientRef.current = setTimeout(() => {
+        if (cancelled) return;
+        if (document.visibilityState === "visible") {
+          const parts = pick(NPC_AMBIENT_EVENTS).map((p) => ({ ...p }));
+          const ambientEvent: FeedEvent = {
+            id: genId("evt"),
+            parts,
+            createdAt: Date.now(),
+          };
+          setEvents((prev) => [ambientEvent, ...prev].slice(0, 12));
+          void saveEvent(ambientEvent).catch(() => undefined);
+        }
+        schedule();
+      }, delay);
     };
-  }, [status]);
+
+    schedule();
+    return () => {
+      cancelled = true;
+      if (ambientRef.current) clearTimeout(ambientRef.current);
+    };
+  }, [status, profile.onboarded]);
 
   /*
    * NPC uploads: real creators post NEW moments into the live feed
@@ -454,7 +533,8 @@ export function ViceProvider({ children }: { children: ReactNode }) {
    */
   const npcUploadRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
-    if (status !== "ready") return;
+    // NPC uploads wait until the citizen has registered (onboarding done).
+    if (status !== "ready" || !profile.onboarded) return;
     npcUploadRef.current = setInterval(() => {
       if (document.visibilityState !== "visible") return;
       const entry = pick(NPC_MOMENT_POOL);
@@ -500,26 +580,132 @@ export function ViceProvider({ children }: { children: ReactNode }) {
           postId: post.id,
         });
       }
-    }, 90_000);
+    }, 55_000 + Math.random() * 25_000);
     return () => {
       if (npcUploadRef.current) clearInterval(npcUploadRef.current);
     };
     // notify is stable (useCallback with stable deps)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
+  }, [status, profile.onboarded]);
 
   /* ---------------- Mutations ---------------- */
 
   const updateProfile = useCallback(
     (patch: Partial<Omit<ViceProfile, "id">>) => {
-      setProfile((prev) => {
-        const next = { ...prev, ...patch };
-        void saveProfile(next).catch(() => undefined);
-        return next;
-      });
+      const prev = profileRef.current;
+      const next = { ...prev, ...patch };
+      // Keep the ref hot so timer callbacks and cascades see fresh values.
+      profileRef.current = next;
+      setProfile(next);
+      void saveProfile(next).catch(() => undefined);
+
+      const nameChanged = patch.name !== undefined && next.name !== prev.name;
+      const avatarChanged =
+        patch.avatar !== undefined && next.avatar !== prev.avatar;
+      if (!nameChanged && !avatarChanged) return;
+
+      /*
+       * Identity cascade — when the player renames or changes their pic,
+       * rewrite every post/comment card they own (and their likes on other
+       * posts) so the whole social graph shows the new identity at once.
+       * Saves are idempotent puts; computed from the current snapshots.
+       */
+      const postUpdates: VicePost[] = [];
+      for (const p of posts) {
+        const ownContent = p.own || p.author === prev.name;
+        const fixAuthor =
+          ownContent && (p.author !== next.name || p.avatar !== next.avatar);
+        const fixLikes = nameChanged && p.likedBy.includes(prev.name);
+        if (!fixAuthor && !fixLikes) continue;
+        postUpdates.push({
+          ...p,
+          author: fixAuthor ? next.name : p.author,
+          avatar: fixAuthor ? next.avatar : p.avatar,
+          likedBy: fixLikes
+            ? p.likedBy.map((n) => (n === prev.name ? next.name : n))
+            : p.likedBy,
+        });
+      }
+      if (postUpdates.length > 0) {
+        const byId = new Map(postUpdates.map((p) => [p.id, p]));
+        setPosts((current) =>
+          current.map((p) => byId.get(p.id) ?? p)
+        );
+        void Promise.all(postUpdates.map((p) => savePost(p))).catch(
+          () => undefined
+        );
+      }
+
+      const commentUpdates: ViceComment[] = [];
+      for (const c of comments) {
+        if (c.author !== prev.name) continue;
+        if (c.author === next.name && c.avatar === next.avatar) continue;
+        commentUpdates.push({ ...c, author: next.name, avatar: next.avatar });
+      }
+      if (commentUpdates.length > 0) {
+        const byId = new Map(commentUpdates.map((c) => [c.id, c]));
+        setComments((current) =>
+          current.map((c) => byId.get(c.id) ?? c)
+        );
+        void Promise.all(commentUpdates.map((c) => saveComment(c))).catch(
+          () => undefined
+        );
+      }
+
+      // Creators directory is keyed by name — drop the old row, write the new.
+      if (nameChanged && prev.name) {
+        void deletePlayer(prev.name).catch(() => undefined);
+      }
+      void savePlayer({
+        name: next.name,
+        avatar: next.avatar,
+        crew: next.crew,
+        bio: next.bio,
+        district: next.region,
+        repScore: next.repScore,
+        verified: true,
+      }).catch(() => undefined);
     },
-    []
+    [posts, comments]
   );
+
+  /**
+   * Register the citizen: bind username/archetype/personality to the
+   * existing citizenId (generated at first boot), persist, and enter
+   * the network. Level is derived from repScore — starts at 1 / 0 XP.
+   */
+  const completeOnboarding = useCallback((input: OnboardingInput) => {
+    const prev = profileRef.current;
+    const next: ViceProfile = {
+      ...prev,
+      citizenId: prev.citizenId || crypto.randomUUID(),
+      name: input.username,
+      crew: crewFor(input.archetype),
+      avatar: avatarPlaceholder(input.username, input.archetype),
+      bio: bioFor(input.personality),
+      archetype: input.archetype,
+      personality: input.personality,
+      interests: interestsFor(input.archetype),
+      repScore: prev.repScore || 0,
+      following: [],
+      followers: [],
+      createdAt: prev.createdAt || Date.now(),
+      onboarded: true,
+    };
+    profileRef.current = next;
+    setProfile(next);
+    void saveProfile(next).catch(() => undefined);
+    // Register on the creators directory so the citizen exists citywide.
+    void savePlayer({
+      name: next.name,
+      avatar: next.avatar,
+      crew: next.crew,
+      bio: next.bio,
+      district: next.region,
+      repScore: next.repScore,
+      verified: false,
+    }).catch(() => undefined);
+  }, []);
 
   const toggleLike = useCallback((postId: string) => {
     setPosts((prev) =>
@@ -589,7 +775,7 @@ export function ViceProvider({ children }: { children: ReactNode }) {
   const publishPost = useCallback(
     (input: PublishInput): VicePost => {
       const hashtags = extractHashtags(input.caption);
-      const category = detectCategory(input.caption);
+      const category = input.category || detectCategory(input.caption);
       const now = Date.now();
       const post: VicePost = {
         id: genId("post"),
@@ -625,20 +811,139 @@ export function ViceProvider({ children }: { children: ReactNode }) {
 
       setPosts((prev) => [post, ...prev]);
       setProfile(nextProfile);
+      profileRef.current = nextProfile;
       setEvents((prev) => [tickerEvent, ...prev].slice(0, 8));
 
       void Promise.all([
         savePost(post),
         saveProfile(nextProfile),
         saveEvent(tickerEvent),
+        // Keep the creators-directory REP row in sync with the profile.
+        savePlayer({
+          name: nextProfile.name,
+          avatar: nextProfile.avatar,
+          crew: nextProfile.crew,
+          bio: nextProfile.bio,
+          district: nextProfile.region,
+          repScore: nextProfile.repScore,
+          verified: true,
+        }),
       ]).catch(() => undefined);
 
-      // Schedule the NPC reaction wave for this fresh moment.
-      scheduleNpcWave(post.id, profile.name, input.district);
+      // Immediate loop feedback: REP gain + post count are visible right away.
+      notify({
+        kind: "rep",
+        title: "MOMENT PUBLISHED",
+        body: `+${PUBLISH_REP} REP — now live in ${input.district}`,
+      });
+
+      // Random wave only when the cinematic sequence is not driving it.
+      if (!input.skipNpcWave) {
+        scheduleNpcWave(post.id, profile.name, input.district);
+      }
 
       return post;
     },
-    [profile, scheduleNpcWave]
+    [profile, scheduleNpcWave, notify]
+  );
+
+  /** Deterministic engagement beat used by the publish sequence UI. */
+  const applyPublishEngagement = useCallback(
+    (postId: string, step: PublishEngagementStep) => {
+      if (step.kind === "like") {
+        applyNpcLike(postId, step.npc);
+        grantRep(NPC_LIKE_REP);
+        // Sparse like notifications only — the inbox should not explode.
+        if (Math.random() < 0.2) {
+          notify({
+            kind: "like",
+            title: step.npc,
+            body: "liked your moment",
+            avatar: npcAvatarFor(step.npc),
+            actor: step.npc,
+            postId,
+          });
+        }
+        return;
+      }
+      if (step.kind === "comment") {
+        applyNpcComment(postId, step.npc, step.text);
+        grantRep(NPC_COMMENT_REP);
+        notify({
+          kind: "comment",
+          title: step.npc,
+          body:
+            step.text.length > 64 ? `${step.text.slice(0, 61)}...` : step.text,
+          avatar: npcAvatarFor(step.npc),
+          actor: step.npc,
+          postId,
+        });
+        return;
+      }
+      if (step.kind === "follow") {
+        const followers = Array.from(
+          new Set([...profileRef.current.followers, step.npc])
+        );
+        setProfile((prev) => {
+          const next = { ...prev, followers };
+          void saveProfile(next).catch(() => undefined);
+          return next;
+        });
+        notify({
+          kind: "follow",
+          title: step.npc,
+          body: "joined your crew",
+          avatar: npcAvatarFor(step.npc),
+          actor: step.npc,
+        });
+        return;
+      }
+      // rep
+      grantRep(step.amount ?? 0);
+      notify({
+        kind: "rep",
+        title: step.npc,
+        body: `+${step.amount ?? 0} REP — your moment is trending`,
+      });
+    },
+    [applyNpcLike, applyNpcComment, grantRep, notify]
+  );
+
+  /**
+   * Schedule an entire publish engagement plan on provider timers.
+   * Survives reveal unmount so reactions keep dripping onto the feed.
+   */
+  const schedulePublishPlan = useCallback(
+    (
+      postId: string,
+      plan: {
+        steps: ReadonlyArray<{
+          at: number;
+          kind: "like" | "comment" | "follow" | "rep";
+          npc: string;
+          text?: string;
+          amount?: number;
+        }>;
+      }
+    ) => {
+      for (const step of plan.steps) {
+        const { at, kind, npc, text, amount } = step;
+        const engagement: PublishEngagementStep =
+          kind === "comment"
+            ? { kind: "comment", npc, text: text ?? "" }
+            : kind === "rep"
+              ? { kind: "rep", npc, amount: amount ?? 0 }
+              : kind === "follow"
+                ? { kind: "follow", npc }
+                : { kind: "like", npc };
+        const t = setTimeout(() => {
+          applyPublishEngagement(postId, engagement);
+          if (engagement.kind === "like") playSfxQuietLike();
+        }, at);
+        timersRef.current.add(t);
+      }
+    },
+    [applyPublishEngagement]
   );
 
   const toggleFollow = useCallback(
@@ -709,6 +1014,21 @@ export function ViceProvider({ children }: { children: ReactNode }) {
       .catch(() => undefined);
   }, []);
 
+  /** Dev/testing: full local wipe that returns to the onboarding gate. */
+  const resetIdentity = useCallback(() => {
+    void resetDatabase()
+      .then((snap) => {
+        setProfile(ensureProfileIdentity(snap.profile));
+        setPosts(snap.posts);
+        setComments(snap.comments);
+        setEvents(snap.events.slice(0, 8));
+        setPlayers(snap.players);
+        setNotifications(snap.notifications);
+        setToasts([]);
+      })
+      .catch(() => undefined);
+  }, []);
+
   const commentsFor = useCallback(
     (postId: string) => comments.filter((c) => c.postId === postId),
     [comments]
@@ -772,10 +1092,13 @@ export function ViceProvider({ children }: { children: ReactNode }) {
       unreadCount,
       playerFor,
       updateProfile,
+      completeOnboarding,
       toggleLike,
       toggleRepost,
       addComment,
       publishPost,
+      applyPublishEngagement,
+      schedulePublishPlan,
       updatePost,
       toggleFollow,
       removeFollower,
@@ -785,6 +1108,7 @@ export function ViceProvider({ children }: { children: ReactNode }) {
       clearNotifications,
       removeNotification,
       resetAll,
+      resetIdentity,
       commentsFor,
     }),
     [
@@ -799,10 +1123,13 @@ export function ViceProvider({ children }: { children: ReactNode }) {
       unreadCount,
       playerFor,
       updateProfile,
+      completeOnboarding,
       toggleLike,
       toggleRepost,
       addComment,
       publishPost,
+      applyPublishEngagement,
+      schedulePublishPlan,
       updatePost,
       toggleFollow,
       removeFollower,
@@ -812,6 +1139,7 @@ export function ViceProvider({ children }: { children: ReactNode }) {
       clearNotifications,
       removeNotification,
       resetAll,
+      resetIdentity,
       commentsFor,
     ]
   );

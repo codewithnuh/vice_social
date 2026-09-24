@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useMemo, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   Check,
   Heart,
@@ -17,11 +18,14 @@ import {
   UserCheck,
 } from "lucide-react";
 import { playSfx } from "@/lib/sfx";
+import { EASE_OUT } from "@/lib/motion";
 import { formatCount, timeAgo, type VicePost } from "@/lib/vice-data";
 import { useVice } from "./vice-provider";
 
 interface VicePostCardProps {
   post: VicePost;
+  /** Transient ring highlight (just published / saved). */
+  highlight?: boolean;
   /** Opens the player profile modal for the post author. */
   onOpenPlayer?: (name: string) => void;
   /** Filters the feed to a hashtag (from caption clicks). */
@@ -30,13 +34,20 @@ interface VicePostCardProps {
   onEditPost?: (post: VicePost) => void;
 }
 
-export function VicePostCard({ post, onOpenPlayer, onOpenHashtag, onEditPost }: VicePostCardProps) {
+export function VicePostCard({
+  post,
+  highlight = false,
+  onOpenPlayer,
+  onOpenHashtag,
+  onEditPost,
+}: VicePostCardProps) {
   const { profile, toggleLike, toggleRepost, addComment, commentsFor, toggleFollow, deletePost } =
     useVice();
   const [showComments, setShowComments] = useState(false);
   const [draft, setDraft] = useState("");
   const [justLiked, setJustLiked] = useState(false);
   const [followed, setFollowed] = useState(false);
+  const reduceMotion = useReducedMotion();
   const comments = useMemo(() => commentsFor(post.id), [commentsFor, post.id]);
 
   const isFollowing = post.own || profile.following.includes(post.author) || followed;
@@ -75,7 +86,14 @@ export function VicePostCard({ post, onOpenPlayer, onOpenHashtag, onEditPost }: 
   }, [post.id, deletePost]);
 
   return (
-    <article className="hud-glass space-y-4 rounded-2xl border border-white/10 p-4 transition duration-300 hover:border-white/20 sm:p-5">
+    <article
+      id={`moment-${post.id}`}
+      className={`hud-glass space-y-4 rounded-2xl border p-4 transition duration-300 sm:p-5 ${
+        highlight
+          ? "border-neon-pink/70 shadow-[0_0_24px_rgba(236,72,153,0.25)] ring-1 ring-neon-pink/50"
+          : "border-white/10 hover:border-white/20"
+      }`}
+    >
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-start gap-3">
@@ -211,12 +229,22 @@ export function VicePostCard({ post, onOpenPlayer, onOpenHashtag, onEditPost }: 
             post.liked
               ? "font-bold text-neon-pink"
               : "text-slate-400 hover:text-neon-pink"
-          } ${justLiked ? "animate-pulse" : ""}`}
+          }`}
         >
-          <Heart
-            className={`h-4 w-4 ${post.liked ? "fill-current" : ""}`}
-            aria-hidden="true"
-          />
+          <motion.span
+            animate={
+              justLiked && !reduceMotion
+                ? { scale: [1, 1.35, 1] }
+                : { scale: 1 }
+            }
+            transition={{ duration: 0.35, ease: EASE_OUT }}
+            className="inline-flex"
+          >
+            <Heart
+              className={`h-4 w-4 ${post.liked ? "fill-current" : ""}`}
+              aria-hidden="true"
+            />
+          </motion.span>
           <span>{formatCount(post.likes)}</span>
         </button>
 
@@ -251,8 +279,17 @@ export function VicePostCard({ post, onOpenPlayer, onOpenHashtag, onEditPost }: 
       </div>
 
       {/* Comments thread */}
-      {showComments && (
-        <div className="space-y-3 border-t border-white/5 pt-3">
+      <AnimatePresence initial={false}>
+        {showComments && (
+          <motion.div
+            key="comments"
+            initial={reduceMotion ? false : { height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={reduceMotion ? undefined : { height: 0, opacity: 0 }}
+            transition={{ duration: 0.24, ease: EASE_OUT }}
+            className="overflow-hidden"
+          >
+            <div className="space-y-3 border-t border-white/5 pt-3">
           {comments.length === 0 && (
             <p className="font-mono text-[11px] text-slate-500">
               NO TRANSMISSIONS YET — SAY SOMETHING.
@@ -309,8 +346,10 @@ export function VicePostCard({ post, onOpenPlayer, onOpenHashtag, onEditPost }: 
               <Check className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </div>
-        </div>
-      )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </article>
   );
 }
