@@ -57,8 +57,8 @@ export function HudControls({
 
   const repPill = (extraClock: boolean) => (
     <div
-      className={`hud-glass flex items-center gap-2 rounded-full border border-amber-gold/30 px-3 py-1.5 ${
-        extraClock ? "hidden xl:flex" : ""
+      className={`hud-glass items-center gap-2 rounded-full border border-amber-gold/30 px-2.5 py-1.5 sm:px-3 ${
+        extraClock ? "hidden lg:flex" : "flex"
       }`}
     >
       <span className="h-2 w-2 animate-ping rounded-full bg-amber-gold" />
@@ -76,7 +76,7 @@ export function HudControls({
   );
 
   return (
-    <div className="flex items-center gap-2 sm:gap-3">
+    <div className="flex shrink-0 items-center gap-2 sm:gap-3">
       {compact ? repPill(false) : repPill(true)}
       {inboxBell}
       <button

@@ -6,8 +6,14 @@
  */
 
 import { useCallback, useRef, useState } from "react";
-import { Camera, Check, RotateCcw, Upload, X } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { Camera, Check, Fingerprint, RotateCcw, Upload, X } from "lucide-react";
 import { playSfx } from "@/lib/sfx";
+import {
+  modalBackdropVariants,
+  modalPanelVariants,
+  modalTransition,
+} from "@/lib/motion";
 import { DISTRICTS, type ViceDistrict } from "@/lib/vice-data";
 import { useVice } from "./vice-provider";
 
@@ -19,7 +25,7 @@ interface ProfileEditorProps {
 }
 
 export function ProfileEditor({ open, onClose }: ProfileEditorProps) {
-  const { profile, updateProfile, resetAll } = useVice();
+  const { profile, updateProfile, resetAll, resetIdentity } = useVice();
   const [name, setName] = useState(profile.name);
   const [crew, setCrew] = useState(profile.crew);
   const [avatar, setAvatar] = useState(profile.avatar);
@@ -28,6 +34,7 @@ export function ProfileEditor({ open, onClose }: ProfileEditorProps) {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const reduceMotion = useReducedMotion();
 
   const handleAvatarFile = useCallback((file: File) => {
     if (!file.type.startsWith("image/")) {
@@ -73,14 +80,37 @@ export function ProfileEditor({ open, onClose }: ProfileEditorProps) {
     }
   }, [resetAll, onClose]);
 
-  if (!open) return null;
+  /** Dev/testing: wipe identity and return to the onboarding flow. */
+  const handleResetIdentity = useCallback(() => {
+    if (
+      window.confirm(
+        "Reset your citizen identity? This wipes ALL local data and re-runs onboarding."
+      )
+    ) {
+      playSfx("shutter");
+      resetIdentity();
+      onClose();
+    }
+  }, [resetIdentity, onClose]);
 
   return (
-    <div
+    <AnimatePresence>
+      {open && (
+    <motion.div
+      variants={reduceMotion ? undefined : modalBackdropVariants}
+      initial={reduceMotion ? false : "initial"}
+      animate="animate"
+      exit="exit"
+      transition={modalTransition}
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
-      <div
+      <motion.div
+        variants={reduceMotion ? undefined : modalPanelVariants}
+        initial={reduceMotion ? false : "initial"}
+        animate="animate"
+        exit="exit"
+        transition={modalTransition}
         className="hud-glass max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-neon-cyan/30 p-6 shadow-2xl shadow-neon-cyan/10"
         onClick={(e) => e.stopPropagation()}
       >
@@ -240,7 +270,19 @@ export function ProfileEditor({ open, onClose }: ProfileEditorProps) {
             RESET
           </button>
         </div>
-      </div>
-    </div>
+
+        {/* Dev/testing: re-run identity onboarding */}
+        <button
+          onClick={handleResetIdentity}
+          title="Wipe identity and re-run onboarding (dev/testing)"
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-night-steel/40 py-2.5 font-mono text-[0.65rem] text-slate-500 transition hover:border-neon-cyan/40 hover:text-neon-cyan"
+        >
+          <Fingerprint className="h-3.5 w-3.5" aria-hidden="true" />
+          RESET IDENTITY (DEV) — RE-ONBOARD
+        </button>
+      </motion.div>
+    </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
 import {
   Flame,
   MapPin,
@@ -16,13 +17,13 @@ import {
   X,
 } from "lucide-react";
 import { playSfx } from "@/lib/sfx";
+import { EASE_OUT, postEntrance } from "@/lib/motion";
 import {
   DISTRICTS,
   districtRank,
   formatCount,
   repLevelFor,
   repProgressFor,
-  timeAgo,
   type FeedTab,
   type ViceDistrict,
   type VicePost,
@@ -35,6 +36,7 @@ import {
   InboxBell,
   NotificationInbox,
 } from "./notification-inbox";
+import { CityPulse } from "./city-pulse";
 
 const TABS: ReadonlyArray<{ id: FeedTab; label: string; icon: typeof Flame }> = [
   { id: "trending", label: "TRENDING", icon: Flame },
@@ -42,19 +44,15 @@ const TABS: ReadonlyArray<{ id: FeedTab; label: string; icon: typeof Flame }> = 
   { id: "following", label: "CREW FEED", icon: Users },
 ];
 
-const TONE_CLASSES: Record<string, string> = {
-  pink: "text-neon-pink font-bold",
-  gold: "text-amber-gold font-bold",
-  cyan: "text-neon-cyan font-bold",
-  white: "text-white font-bold",
-  plain: "",
-};
-
 interface ViceFeedProps {
   onCompose: () => void;
   onOpenProfileScreen: () => void;
   /** Opens the studio pre-loaded with one of your posts for editing. */
   onEditPost: (post: VicePost) => void;
+  /** Post to scroll to + highlight (just published / saved). */
+  focusPostId?: string | null;
+  /** Called after the focus target has been scrolled into view. */
+  onClearFocus?: () => void;
 }
 
 /** Live FPS counter sampled with requestAnimationFrame. */
@@ -80,11 +78,16 @@ function useFps(): string {
   return fps;
 }
 
-export function ViceFeed({ onCompose, onOpenProfileScreen, onEditPost }: ViceFeedProps) {
+export function ViceFeed({
+  onCompose,
+  onOpenProfileScreen,
+  onEditPost,
+  focusPostId,
+  onClearFocus,
+}: ViceFeedProps) {
   const {
     profile,
     posts,
-    events,
     updateProfile,
     players,
     unreadCount,
@@ -94,6 +97,7 @@ export function ViceFeed({ onCompose, onOpenProfileScreen, onEditPost }: ViceFee
   const [hashtag, setHashtag] = useState<string | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
   const [inboxOpen, setInboxOpen] = useState(false);
+  const reduceMotion = useReducedMotion();
   const fps = useFps();
 
   /* ------- Derived feed ------- */
@@ -125,7 +129,7 @@ export function ViceFeed({ onCompose, onOpenProfileScreen, onEditPost }: ViceFee
 
   /* ------- Derived left rail ------- */
   const myPosts = useMemo(
-    () => posts.filter((p) => p.author === profile.name),
+    () => posts.filter((p) => p.own || p.author === profile.name),
     [posts, profile.name]
   );
 
@@ -165,82 +169,111 @@ export function ViceFeed({ onCompose, onOpenProfileScreen, onEditPost }: ViceFee
     setHashtag((current) => (current === tag ? null : tag));
   }, []);
 
+  // Scroll the just-published moment into view so the loop visibly closes.
+  useEffect(() => {
+    if (!focusPostId) return;
+    const el = document.getElementById(`moment-${focusPostId}`);
+    if (el) {
+      el.scrollIntoView({
+        behavior: reduceMotion ? "auto" : "smooth",
+        block: "center",
+      });
+    }
+    const t = window.setTimeout(() => onClearFocus?.(), 2400);
+    return () => window.clearTimeout(t);
+  }, [focusPostId, onClearFocus, reduceMotion]);
+
   return (
     <div className="flex min-h-screen flex-col pb-24">
-      {/* Top HUD navigation bar */}
-      <header className="hud-glass sticky top-0 z-30 flex items-center justify-between border-b border-white/10 px-4 py-3 sm:px-8">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => {
-              playSfx("click");
-              setTab("trending");
-            }}
-            className="font-display text-xl font-black italic tracking-wider text-white transition hover:text-neon-pink"
-          >
-            VICE<span className="text-neon-pink">SOCIAL</span>
-          </button>
-          <div className="hidden items-center gap-1 rounded-lg border border-white/5 bg-void-black/60 p-1 font-mono text-xs md:flex">
-            <span className="px-2 py-0.5 text-neon-cyan">
-              REGION: {profile.region.toUpperCase()}
-            </span>
-            <span className="text-slate-600">|</span>
-            <span className="px-2 py-0.5 text-slate-400">FPS: {fps}</span>
-          </div>
-        </div>
-
-        {/* Feed navigation tabs — scrollable on mobile */}
-        <nav className="flex items-center overflow-x-auto rounded-xl border border-white/5 bg-urban-graphite/80 p-1 font-mono text-xs scrollbar-none">
-          {TABS.map(({ id, label, icon: Icon }) => (
+      {/* Top HUD — two rows on mobile (brand/actions, then tabs); one row from sm */}
+      <header className="hud-glass sticky top-0 z-30 border-b border-white/10">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 py-2.5 sm:gap-x-4 sm:px-8 sm:py-3">
+          {/* Brand */}
+          <div className="order-1 flex min-w-0 items-center gap-3 sm:gap-4">
             <button
-              key={id}
-              onClick={() => handleTab(id)}
-              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 transition sm:px-4 ${
-                tab === id
-                  ? "border border-neon-pink/40 bg-night-steel font-bold text-white shadow-sm"
-                  : "text-slate-400 hover:text-white"
-              }`}
+              onClick={() => {
+                playSfx("click");
+                setTab("trending");
+              }}
+              className="font-display text-lg font-black italic tracking-wider text-white transition hover:text-neon-pink sm:text-xl"
             >
-              <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-              {label}
+              VICE<span className="text-neon-pink">SOCIAL</span>
             </button>
-          ))}
-        </nav>
-
-        {/* Right cluster: HUD pill + inbox + profile quick card */}
-        <div className="flex items-center gap-2 sm:gap-4">
-          <HudControls repScore={profile.repScore} inboxBell={
-            <InboxBell
-              onToggle={() => setInboxOpen((v) => !v)}
-              unreadCount={unreadCount}
-            />
-          } />
-
-          {/* Profile quick card — navigates to profile screen */}
-          <button
-            onClick={() => {
-              playSfx("click");
-              onOpenProfileScreen();
-            }}
-            className="group flex items-center gap-3 rounded-xl border border-transparent px-2 py-1 transition hover:border-white/10"
-            title="View your profile"
-          >
-            <div className="hidden text-right sm:block">
-              <div className="flex items-center justify-end gap-1.5 font-display text-xs font-bold text-white">
-                {profile.name}
-                <Pencil className="h-2.5 w-2.5 text-slate-500 transition group-hover:text-neon-cyan" />
-              </div>
-              <div className="font-mono text-[10px] text-neon-cyan">
-                REP LV {repLevelFor(profile.repScore)}
-              </div>
-              <div className="font-mono text-[10px] text-amber-gold">{profile.crew}</div>
+            <div className="hidden items-center gap-1 rounded-lg border border-white/5 bg-void-black/60 p-1 font-mono text-xs md:flex">
+              <span className="px-2 py-0.5 text-neon-cyan">
+                REGION: {profile.region.toUpperCase()}
+              </span>
+              <span className="text-slate-600">|</span>
+              <span className="px-2 py-0.5 text-slate-400">FPS: {fps}</span>
             </div>
-          {/* eslint-disable-next-line @next/next/no-img-element -- local data URL / seeded remote thumb */}
-          <img
-            src={profile.avatar}
-            alt="Your avatar"
-            className="h-9 w-9 rounded-lg border border-neon-pink/60 object-cover shadow-md transition group-hover:border-neon-cyan"
-          />
-          </button>
+          </div>
+
+          {/* Actions — never shrink so profile stays reachable */}
+          <div className="order-2 ml-auto flex shrink-0 items-center gap-2 sm:order-3 sm:ml-0 sm:gap-4">
+            <HudControls
+              repScore={profile.repScore}
+              inboxBell={
+                <InboxBell
+                  onToggle={() => setInboxOpen((v) => !v)}
+                  unreadCount={unreadCount}
+                />
+              }
+            />
+
+            {/* Profile quick card — navigates to profile screen */}
+            <button
+              onClick={() => {
+                playSfx("click");
+                onOpenProfileScreen();
+              }}
+              className="group flex shrink-0 items-center gap-3 rounded-xl border border-transparent px-1.5 py-1 transition hover:border-white/10 sm:px-2"
+              title="View your profile"
+              aria-label="View your profile"
+            >
+              <div className="hidden text-right sm:block">
+                <div className="flex items-center justify-end gap-1.5 font-display text-xs font-bold text-white">
+                  {profile.name}
+                  <Pencil className="h-2.5 w-2.5 text-slate-500 transition group-hover:text-neon-cyan" />
+                </div>
+                <div className="font-mono text-[10px] text-neon-cyan">
+                  REP LV {repLevelFor(profile.repScore)}
+                </div>
+                <div className="font-mono text-[10px] text-amber-gold">
+                  {profile.crew}
+                </div>
+              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element -- local data URL / seeded remote thumb */}
+              <img
+                src={profile.avatar}
+                alt=""
+                className="h-9 w-9 rounded-lg border border-neon-pink/60 object-cover shadow-md transition group-hover:border-neon-cyan"
+              />
+            </button>
+          </div>
+
+          {/* Feed tabs — own full-width row on mobile; inline center from sm */}
+          <nav
+            className="order-last w-full min-w-0 overflow-x-auto rounded-xl border border-white/5 bg-urban-graphite/80 p-1 font-mono text-xs scrollbar-none sm:order-2 sm:w-auto sm:flex-1 sm:max-w-md sm:justify-self-center"
+            aria-label="Feed filters"
+          >
+            <div className="flex items-center">
+              {TABS.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => handleTab(id)}
+                  aria-pressed={tab === id}
+                  className={`flex flex-1 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-2 transition sm:flex-none sm:px-4 ${
+                    tab === id
+                      ? "border border-neon-pink/40 bg-night-steel font-bold text-white shadow-sm"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          </nav>
         </div>
       </header>
 
@@ -283,6 +316,15 @@ export function ViceFeed({ onCompose, onOpenProfileScreen, onEditPost }: ViceFee
                 {profile.bio}
               </p>
             )}
+
+            <div className="flex flex-wrap gap-1.5 font-mono text-[10px]">
+              <span className="rounded border border-neon-pink/30 bg-neon-pink/10 px-1.5 py-0.5 text-neon-pink">
+                {profile.archetype}
+              </span>
+              <span className="rounded border border-neon-cyan/30 bg-neon-cyan/10 px-1.5 py-0.5 text-neon-cyan">
+                {profile.personality}
+              </span>
+            </div>
 
             <div className="grid grid-cols-2 gap-2 text-center font-mono">
               <div className="rounded-lg border border-white/5 bg-night-steel/60 p-2">
@@ -358,10 +400,18 @@ export function ViceFeed({ onCompose, onOpenProfileScreen, onEditPost }: ViceFee
           </div>
         </div>
 
-        {/* Center column: social stream */}
+        {/* Center column: City Pulse (mobile) + social stream */}
         <div className="space-y-6 lg:col-span-6">
+          <div className="lg:hidden">
+            <CityPulse onOpenPlayer={setViewing} />
+          </div>
           {hashtag && (
-            <div className="flex items-center justify-between rounded-xl border border-neon-cyan/40 bg-neon-cyan/5 px-4 py-2.5 font-mono text-xs">
+            <motion.div
+              initial={reduceMotion ? false : { opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2, ease: EASE_OUT }}
+              className="flex items-center justify-between rounded-xl border border-neon-cyan/40 bg-neon-cyan/5 px-4 py-2.5 font-mono text-xs"
+            >
               <span className="text-neon-cyan">
                 FILTER: #{hashtag} — {visiblePosts.length} moment
                 {visiblePosts.length === 1 ? "" : "s"}
@@ -375,10 +425,15 @@ export function ViceFeed({ onCompose, onOpenProfileScreen, onEditPost }: ViceFee
               >
                 <X className="h-3.5 w-3.5" aria-hidden="true" /> CLEAR
               </button>
-            </div>
+            </motion.div>
           )}
           {visiblePosts.length === 0 ? (
-            <div className="hud-glass rounded-2xl border border-white/10 p-10 text-center">
+            <motion.div
+              initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: EASE_OUT }}
+              className="hud-glass rounded-2xl border border-white/10 p-10 text-center"
+            >
               <p className="font-display text-lg font-bold text-white">
                 NOTHING IN THIS CHANNEL
               </p>
@@ -389,48 +444,30 @@ export function ViceFeed({ onCompose, onOpenProfileScreen, onEditPost }: ViceFee
                     ? `No moments from ${profile.region} yet — switch districts or post one.`
                     : "The city is quiet. Break the silence."}
               </p>
-            </div>
+            </motion.div>
           ) : (
-            visiblePosts.map((post) => (
-              <VicePostCard
+            visiblePosts.map((post, i) => (
+              <motion.div
                 key={post.id}
-                post={post}
-                onOpenPlayer={setViewing}
-                onOpenHashtag={handleHashtag}
-                onEditPost={onEditPost}
-              />
+                {...(reduceMotion
+                  ? {}
+                  : postEntrance(i))}
+              >
+                <VicePostCard
+                  post={post}
+                  highlight={post.id === focusPostId}
+                  onOpenPlayer={setViewing}
+                  onOpenHashtag={handleHashtag}
+                  onEditPost={onEditPost}
+                />
+              </motion.div>
             ))
           )}
         </div>
 
-        {/* Right column: live city ticker */}
+        {/* Right column: City Pulse + crew */}
         <div className="hidden space-y-6 lg:col-span-3 lg:block">
-          <div className="hud-glass space-y-4 rounded-2xl border border-white/10 p-5">
-            <h3 className="flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-wider text-neon-cyan">
-              <span className="h-2 w-2 animate-ping rounded-full bg-neon-cyan" />
-              <span>LIVE CITY NETWORK FEED</span>
-            </h3>
-            <div className="space-y-3 font-mono text-xs text-slate-300">
-              {events.length === 0 && (
-                <p className="text-[11px] text-slate-500">NETWORK IDLE…</p>
-              )}
-              {events.map((event) => (
-                <div
-                  key={event.id}
-                  className="rounded-xl border border-white/5 bg-night-steel/40 p-2.5"
-                >
-                  {event.parts.map((part, i) => (
-                    <span key={i} className={TONE_CLASSES[part.tone] ?? ""}>
-                      {part.text}
-                    </span>
-                  ))}
-                  <div className="mt-1 text-[10px] text-slate-500">
-                    {timeAgo(event.createdAt)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <CityPulse onOpenPlayer={setViewing} />
 
           {/* Your crew — following list with unfollow */}
           <div className="hud-glass space-y-3 rounded-2xl border border-white/10 p-5">
@@ -498,17 +535,23 @@ export function ViceFeed({ onCompose, onOpenProfileScreen, onEditPost }: ViceFee
 
       {/* Floating action button */}
       <div className="fixed right-4 bottom-4 z-40 sm:right-6 sm:bottom-6 md:right-8 md:bottom-8">
-        <button
+        <motion.button
           onClick={() => {
             playSfx("click");
             onCompose();
           }}
-          className="group relative flex items-center gap-2 rounded-2xl bg-gradient-to-r from-neon-pink to-purple-600 px-4 py-3 font-display text-sm font-bold text-white shadow-2xl shadow-neon-pink/50 transition-all hover:scale-105 active:scale-95 sm:gap-3 sm:px-6 sm:py-4 sm:text-base"
+          whileHover={reduceMotion ? undefined : { scale: 1.04 }}
+          whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+          transition={{ duration: 0.16, ease: EASE_OUT }}
+          className="group relative flex items-center gap-2 rounded-2xl bg-gradient-to-r from-neon-pink to-purple-600 px-4 py-3 font-display text-sm font-bold text-white shadow-2xl shadow-neon-pink/50 transition-shadow hover:shadow-neon-pink/70 sm:gap-3 sm:px-6 sm:py-4 sm:text-base"
         >
-          <Plus className="h-5 w-5 animate-bounce sm:h-6 sm:w-6" aria-hidden="true" />
+          <Plus
+            className="h-5 w-5 transition-transform duration-200 group-hover:rotate-90 sm:h-6 sm:w-6"
+            aria-hidden="true"
+          />
           <span className="hidden sm:inline">CREATE MOMENT</span>
           <span className="sm:hidden">CREATE</span>
-        </button>
+        </motion.button>
       </div>
 
       {/* Notification inbox slide-over */}

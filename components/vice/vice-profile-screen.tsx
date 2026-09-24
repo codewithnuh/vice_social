@@ -1,23 +1,35 @@
 "use client";
 
 /**
- * Full profile screen — view your posts, followers, and following.
- * Accessible from the profile card in the feed header.
+ * Full profile screen — the citizen's social hub.
+ * Avatar, username, followers/following, REP, level, and a posts grid
+ * with a game-style detail modal. Accessible from the feed header.
  */
 
 import { useMemo, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   ArrowLeft,
   BadgeCheck,
+  Fingerprint,
+  Heart,
   MapPin,
+  MessageCircle,
   Pencil,
   UserMinus,
   Users,
+  X,
 } from "lucide-react";
 import { playSfx } from "@/lib/sfx";
 import {
+  modalBackdropVariants,
+  modalPanelVariants,
+  modalTransition,
+} from "@/lib/motion";
+import {
   districtRank,
   formatCount,
+  identityFromProfile,
   repLevelFor,
   repProgressFor,
   type VicePost,
@@ -28,7 +40,7 @@ import { VicePostCard } from "./vice-post-card";
 type ProfileTab = "posts" | "followers" | "following";
 
 const TABS: ReadonlyArray<{ id: ProfileTab; label: string }> = [
-  { id: "posts", label: "POSTS" },
+  { id: "posts", label: "TIMELINE" },
   { id: "followers", label: "FOLLOWERS" },
   { id: "following", label: "FOLLOWING" },
 ];
@@ -46,14 +58,22 @@ export function ViceProfileScreen({
   onEditPost,
   onEditProfile,
 }: ViceProfileScreenProps) {
-  const { profile, posts, players, playerFor, removeFollower, toggleFollow } =
+  const { profile, posts, playerFor, removeFollower, toggleFollow, commentsFor } =
     useVice();
   const [tab, setTab] = useState<ProfileTab>("posts");
+  /** Grid thumbnail selected for the detail modal (by id → always fresh). */
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const reduceMotion = useReducedMotion();
+  const identity = identityFromProfile(profile);
+
+  const selectedPost = selectedPostId
+    ? (posts.find((p) => p.id === selectedPostId) ?? null)
+    : null;
 
   const myPosts = useMemo(
     () =>
       posts
-        .filter((p) => p.author === profile.name)
+        .filter((p) => p.own || p.author === profile.name)
         .sort((a, b) => b.createdAt - a.createdAt),
     [posts, profile.name]
   );
@@ -77,32 +97,34 @@ export function ViceProfileScreen({
   return (
     <div className="flex min-h-screen flex-col pb-24">
       {/* Top bar */}
-      <header className="hud-glass sticky top-0 z-30 flex items-center justify-between border-b border-white/10 px-4 py-3 sm:px-8">
-        <div className="flex items-center gap-4">
+      <header className="hud-glass sticky top-0 z-30 border-b border-white/10">
+        <div className="flex items-center justify-between gap-3 px-3 py-2.5 sm:px-8 sm:py-3">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+            <button
+              onClick={() => {
+                playSfx("click");
+                onBack();
+              }}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/40 text-slate-300 transition hover:border-neon-cyan/50 hover:text-neon-cyan"
+              aria-label="Back to feed"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <h1 className="truncate font-display text-base font-black tracking-wider text-white sm:text-lg">
+              YOUR <span className="text-neon-pink">PROFILE</span>
+            </h1>
+          </div>
           <button
             onClick={() => {
               playSfx("click");
-              onBack();
+              onEditProfile();
             }}
-            className="rounded-lg border border-white/10 bg-black/40 p-2 text-slate-300 transition hover:border-neon-cyan/50 hover:text-neon-cyan"
-            aria-label="Back to feed"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-xs text-slate-300 transition hover:border-neon-cyan/50 hover:text-neon-cyan"
           >
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+            <span className="hidden sm:inline">EDIT</span>
           </button>
-          <h1 className="font-display text-lg font-black tracking-wider text-white">
-            YOUR <span className="text-neon-pink">PROFILE</span>
-          </h1>
         </div>
-        <button
-          onClick={() => {
-            playSfx("click");
-            onEditProfile();
-          }}
-          className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-xs text-slate-300 transition hover:border-neon-cyan/50 hover:text-neon-cyan"
-        >
-          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-          <span className="hidden sm:inline">EDIT</span>
-        </button>
       </header>
 
       <div className="mx-auto w-full max-w-2xl px-4 pt-6 sm:px-6">
@@ -136,6 +158,38 @@ export function ViceProfileScreen({
               {profile.bio}
             </p>
           )}
+
+          {/* Citizen identity chips */}
+          <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px]">
+            <span className="rounded border border-neon-pink/30 bg-neon-pink/10 px-2 py-0.5 text-neon-pink">
+              {identity.archetype}
+            </span>
+            <span className="rounded border border-neon-cyan/30 bg-neon-cyan/10 px-2 py-0.5 text-neon-cyan">
+              {identity.personality}
+            </span>
+            {identity.interests.map((interest) => (
+              <span
+                key={interest}
+                className="rounded border border-white/10 bg-night-steel/60 px-2 py-0.5 text-slate-400"
+              >
+                #{interest}
+              </span>
+            ))}
+          </div>
+
+          {/* Citizen ID + registration date */}
+          <div className="flex flex-wrap justify-between gap-2 font-mono text-[10px] text-slate-500">
+            <span className="flex items-center gap-1">
+              <Fingerprint className="h-3 w-3 text-neon-cyan/60" aria-hidden="true" />
+              CITIZEN ID // {identity.citizenId.slice(0, 8).toUpperCase() || "PENDING"}
+            </span>
+            <span>
+              REGISTERED{" "}
+              {identity.createdAt
+                ? new Date(identity.createdAt).toLocaleDateString()
+                : "—"}
+            </span>
+          </div>
 
           <div className="flex items-center gap-1.5 font-mono text-[11px] text-slate-400">
             <MapPin className="h-3 w-3 text-neon-cyan" aria-hidden="true" />
@@ -225,7 +279,7 @@ export function ViceProfileScreen({
 
         {/* Tab content */}
         <div className="mt-6 space-y-4">
-          {/* POSTS tab */}
+          {/* POSTS tab — game-style moments grid */}
           {tab === "posts" && (
             <>
               {myPosts.length === 0 ? (
@@ -238,14 +292,49 @@ export function ViceProfileScreen({
                   </p>
                 </div>
               ) : (
-                myPosts.map((post) => (
-                  <VicePostCard
-                    key={post.id}
-                    post={post}
-                    onOpenPlayer={onOpenPlayer}
-                    onEditPost={onEditPost}
-                  />
-                ))
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                  {myPosts.map((post) => (
+                    <button
+                      key={post.id}
+                      onClick={() => {
+                        playSfx("click");
+                        setSelectedPostId(post.id);
+                      }}
+                      title={post.caption}
+                      className="group relative aspect-square overflow-hidden rounded-xl border border-white/10 bg-void-black transition hover:border-neon-cyan/60"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element -- local data URL / seeded remote thumb */}
+                      <img
+                        src={post.image}
+                        alt={post.caption}
+                        className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-110"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent" />
+                      <span className="absolute top-1.5 left-1.5 max-w-[calc(100%-0.75rem)] truncate rounded bg-black/70 px-1.5 py-0.5 font-mono text-[8px] text-neon-cyan">
+                        {post.category}
+                      </span>
+                      <span className="rounded absolute top-1.5 right-1.5 bg-amber-gold/90 px-1.5 py-0.5 font-mono text-[8px] font-bold text-void-black">
+                        +{post.repBonus}
+                      </span>
+                      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between px-2 py-1.5 font-mono text-[10px] text-white">
+                        <span className="flex items-center gap-1">
+                          <Heart
+                            className="h-3 w-3 fill-current text-neon-pink"
+                            aria-hidden="true"
+                          />
+                          {formatCount(post.likes)}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <MessageCircle
+                            className="h-3 w-3 text-neon-cyan"
+                            aria-hidden="true"
+                          />
+                          {commentsFor(post.id).length}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               )}
             </>
           )}
@@ -373,6 +462,59 @@ export function ViceProfileScreen({
           )}
         </div>
       </div>
+
+      {/* Moment detail modal — opens from a grid thumbnail */}
+      <AnimatePresence>
+        {selectedPost && (
+          <motion.div
+            variants={reduceMotion ? undefined : modalBackdropVariants}
+            initial={reduceMotion ? false : "initial"}
+            animate="animate"
+            exit="exit"
+            transition={modalTransition}
+            className="fixed inset-0 z-[65] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+            onClick={() => setSelectedPostId(null)}
+            role="presentation"
+          >
+            <motion.div
+              variants={reduceMotion ? undefined : modalPanelVariants}
+              initial={reduceMotion ? false : "initial"}
+              animate="animate"
+              exit="exit"
+              transition={modalTransition}
+              className="hud-glass max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-neon-cyan/30 p-4 shadow-2xl shadow-neon-cyan/10"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-label="Moment detail"
+            >
+            <div className="mb-3 flex items-center justify-between">
+              <span className="font-mono text-xs font-bold tracking-wider text-neon-cyan">
+                MOMENT // {selectedPost.district.toUpperCase()}
+              </span>
+              <button
+                onClick={() => setSelectedPostId(null)}
+                aria-label="Close moment"
+                className="rounded-lg border border-white/10 p-1.5 text-slate-400 transition hover:border-neon-pink/50 hover:text-neon-pink"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+            <VicePostCard
+              post={selectedPost}
+              onOpenPlayer={(name) => {
+                // Close first so the app-level player modal is visible above.
+                setSelectedPostId(null);
+                onOpenPlayer(name);
+              }}
+              onEditPost={(post) => {
+                setSelectedPostId(null);
+                onEditPost(post);
+              }}
+            />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
